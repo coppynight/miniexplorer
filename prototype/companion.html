@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>MiniExplorer - 陪伴模式</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* 陪伴模式特定样式 */
+
+    /* 温暖背景增强 */
+    .companion-background {
+      background:
+        radial-gradient(ellipse at 20% 10%, rgba(248, 180, 217, 0.4) 0%, transparent 40%),
+        radial-gradient(ellipse at 80% 20%, rgba(126, 200, 227, 0.35) 0%, transparent 45%),
+        radial-gradient(ellipse at 30% 70%, rgba(152, 228, 201, 0.3) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 90%, rgba(248, 180, 217, 0.25) 0%, transparent 40%),
+        radial-gradient(ellipse at 50% 50%, rgba(255, 249, 240, 0.8) 0%, transparent 70%),
+        linear-gradient(180deg, #FFF9F0 0%, #FFF5E6 50%, #FFEFD5 100%);
+    }
+
+    /* 浮动装饰元素 */
+    .floating-decorations {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .floating-shape {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.15;
+      animation: float-around 20s ease-in-out infinite;
+    }
+
+    .floating-shape:nth-child(1) {
+      width: 150px;
+      height: 150px;
+      background: var(--color-primary);
+      top: 10%;
+      left: -30px;
+      animation-delay: 0s;
+    }
+
+    .floating-shape:nth-child(2) {
+      width: 100px;
+      height: 100px;
+      background: var(--color-accent);
+      top: 30%;
+      right: -20px;
+      animation-delay: 3s;
+    }
+
+    .floating-shape:nth-child(3) {
+      width: 80px;
+      height: 80px;
+      background: var(--color-success);
+      bottom: 25%;
+      left: 10%;
+      animation-delay: 6s;
+    }
+
+    .floating-shape:nth-child(4) {
+      width: 120px;
+      height: 120px;
+      background: var(--color-accent);
+      bottom: 15%;
+      right: -40px;
+      animation-delay: 9s;
+    }
+
+    @keyframes float-around {
+      0%, 100% {
+        transform: translate(0, 0) scale(1);
+      }
+      25% {
+        transform: translate(20px, -20px) scale(1.05);
+      }
+      50% {
+        transform: translate(-10px, 10px) scale(0.95);
+      }
+      75% {
+        transform: translate(15px, 15px) scale(1.02);
+      }
+    }
+
+    /* AI 大形象容器 */
+    .ai-avatar-centered {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    /* AI 情绪指示文字 */
+    .ai-mood-text {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-light);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s ease;
+    }
+
+    .ai-mood-text.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* 环绕粒子效果 */
+    .particle-ring {
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .particle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      opacity: 0.6;
+    }
+
+    .particle:nth-child(1) {
+      background: var(--color-accent);
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: orbit 8s linear infinite;
+    }
+
+    .particle:nth-child(2) {
+      background: var(--color-success);
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      animation: orbit 8s linear infinite;
+      animation-delay: -2s;
+    }
+
+    .particle:nth-child(3) {
+      background: var(--color-primary);
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: orbit 8s linear infinite;
+      animation-delay: -4s;
+    }
+
+    .particle:nth-child(4) {
+      background: var(--color-accent-light);
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      animation: orbit 8s linear infinite;
+      animation-delay: -6s;
+    }
+
+    @keyframes orbit {
+      from {
+        transform: rotate(0deg) translateX(110px) rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg) translateX(110px) rotate(-360deg);
+      }
+    }
+
+    /* 爱心飘浮效果（喜欢状态） */
+    .love-hearts {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .love-hearts.active {
+      opacity: 1;
+    }
+
+    .heart {
+      position: absolute;
+      font-size: 24px;
+      opacity: 0;
+    }
+
+    .love-hearts.active .heart {
+      animation: heart-float 2s ease-out forwards;
+    }
+
+    .heart:nth-child(1) { left: 30%; animation-delay: 0s; }
+    .heart:nth-child(2) { left: 50%; animation-delay: 0.3s; }
+    .heart:nth-child(3) { left: 70%; animation-delay: 0.6s; }
+    .heart:nth-child(4) { left: 40%; animation-delay: 0.9s; }
+    .heart:nth-child(5) { left: 60%; animation-delay: 1.2s; }
+
+    @keyframes heart-float {
+      0% {
+        bottom: 50%;
+        opacity: 0;
+        transform: scale(0.5);
+      }
+      20% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      100% {
+        bottom: 90%;
+        opacity: 0;
+        transform: scale(0.8) translateX(20px);
+      }
+    }
+
+    /* 前置相机预览增强 */
+    .camera-preview-small {
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .camera-preview-small:active {
+      transform: scale(0.95);
+    }
+
+    .camera-preview-small .camera-inner {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .camera-preview-small .camera-icon {
+      font-size: 28px;
+      opacity: 0.8;
+    }
+
+    .camera-preview-small .camera-label {
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    /* 声波动画（陪伴模式用更大的） */
+    .companion-sound-waves {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .companion-sound-waves.active {
+      opacity: 1;
+    }
+
+    .companion-wave {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border: 3px solid var(--color-success);
+      border-radius: 50%;
+      opacity: 0;
+    }
+
+    .companion-sound-waves.active .companion-wave {
+      animation: companion-wave-expand 2.5s ease-out infinite;
+    }
+
+    .companion-wave:nth-child(1) { width: 200px; height: 200px; }
+    .companion-wave:nth-child(2) { width: 200px; height: 200px; animation-delay: 0.5s; }
+    .companion-wave:nth-child(3) { width: 200px; height: 200px; animation-delay: 1s; }
+
+    @keyframes companion-wave-expand {
+      0% {
+        width: 200px;
+        height: 200px;
+        opacity: 0.5;
+      }
+      100% {
+        width: 350px;
+        height: 350px;
+        opacity: 0;
+      }
+    }
+
+    /* 欢迎消息气泡 */
+    .welcome-bubble {
+      position: absolute;
+      top: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 16px 24px;
+      background: var(--color-white);
+      border-radius: 24px;
+      box-shadow: var(--shadow-medium);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text);
+      z-index: 15;
+      opacity: 0;
+      animation: bubble-appear 0.5s ease 0.5s forwards;
+    }
+
+    .welcome-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-top: 12px solid var(--color-white);
+    }
+
+    @keyframes bubble-appear {
+      0% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-15px) scale(0.9);
+      }
+      100% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- 安全区域顶部 -->
+    <div class="safe-area-top"></div>
+
+    <!-- 主显示区域 -->
+    <div class="camera-area">
+      <!-- 温暖背景 -->
+      <div class="companion-background">
+        <!-- 浮动装饰 -->
+        <div class="floating-decorations">
+          <div class="floating-shape"></div>
+          <div class="floating-shape"></div>
+          <div class="floating-shape"></div>
+          <div class="floating-shape"></div>
+        </div>
+      </div>
+
+      <!-- 前置相机小预览 -->
+      <div class="camera-preview-small">
+        <div class="camera-inner">
+          <span class="camera-icon">👶</span>
+          <span class="camera-label">小朋友</span>
+        </div>
+      </div>
+
+      <!-- 欢迎消息 -->
+      <div class="welcome-bubble" id="welcomeBubble">
+        👋 嗨，想聊点什么呀？
+      </div>
+
+      <!-- AI 大形象 -->
+      <div class="ai-avatar ai-avatar-centered">
+        <div class="ai-bubble happy" id="aiBubble">
+          <span class="ai-face" id="aiFace">😊</span>
+
+          <!-- 环绕粒子 -->
+          <div class="particle-ring">
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+          </div>
+        </div>
+
+        <!-- 情绪文字 -->
+        <div class="ai-mood-text" id="moodText">开心中~</div>
+
+        <!-- 声波动画 -->
+        <div class="companion-sound-waves" id="soundWaves">
+          <div class="companion-wave"></div>
+          <div class="companion-wave"></div>
+          <div class="companion-wave"></div>
+        </div>
+
+        <!-- 爱心效果 -->
+        <div class="love-hearts" id="loveHearts">
+          <span class="heart">💕</span>
+          <span class="heart">💗</span>
+          <span class="heart">💕</span>
+          <span class="heart">💖</span>
+          <span class="heart">💕</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部控制区 -->
+    <div class="control-area">
+      <!-- 主按钮 -->
+      <button class="main-button idle" id="mainButton" onclick="handleMainButtonClick()">
+        <span class="main-button-icon" id="buttonIcon">🎤</span>
+        <span id="buttonText">说话</span>
+        <div class="ripple-container" id="rippleContainer"></div>
+      </button>
+
+      <!-- Tab 栏 -->
+      <div class="tab-bar">
+        <button class="tab-item inactive" onclick="switchTab('explore')">
+          <span class="tab-icon">🔍</span>
+          <span class="tab-label">看看</span>
+        </button>
+        <button class="tab-item active" onclick="switchTab('companion')">
+          <span class="tab-icon">😊</span>
+          <span class="tab-label">聊天</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 安全区域底部 -->
+    <div class="safe-area-bottom"></div>
+  </div>
+
+  <script>
+    // 状态管理
+    const State = {
+      IDLE: 'idle',
+      LISTENING: 'listening',
+      SPEAKING: 'speaking',
+      ENDING: 'ending'
+    };
+
+    const Mood = {
+      HAPPY: { face: '😊', text: '开心中~', bubbleClass: 'happy' },
+      SURPRISED: { face: '😮', text: '哇！', bubbleClass: 'surprised' },
+      LOVE: { face: '🥰', text: '好喜欢你~', bubbleClass: 'love' },
+      SLEEP: { face: '😴', text: '休息一下', bubbleClass: 'sleep' }
+    };
+
+    let currentState = State.IDLE;
+    let currentMood = Mood.HAPPY;
+    let conversationActive = false;
+    let longPressTimer = null;
+
+    // 元素引用
+    const mainButton = document.getElementById('mainButton');
+    const buttonIcon = document.getElementById('buttonIcon');
+    const buttonText = document.getElementById('buttonText');
+    const aiBubble = document.getElementById('aiBubble');
+    const aiFace = document.getElementById('aiFace');
+    const soundWaves = document.getElementById('soundWaves');
+    const loveHearts = document.getElementById('loveHearts');
+    const moodText = document.getElementById('moodText');
+    const welcomeBubble = document.getElementById('welcomeBubble');
+    const rippleContainer = document.getElementById('rippleContainer');
+
+    // 状态配置
+    const stateConfig = {
+      [State.IDLE]: {
+        icon: '🎤',
+        text: '说话',
+        buttonClass: 'idle'
+      },
+      [State.LISTENING]: {
+        icon: '🎵',
+        text: '听着呢',
+        buttonClass: 'listening'
+      },
+      [State.SPEAKING]: {
+        icon: '😊',
+        text: '等等我',
+        buttonClass: 'speaking'
+      },
+      [State.ENDING]: {
+        icon: '👋',
+        text: '拜拜',
+        buttonClass: 'ending'
+      }
+    };
+
+    // 更新按钮状态
+    function updateButtonState(newState) {
+      currentState = newState;
+      const config = stateConfig[newState];
+
+      mainButton.className = `main-button ${config.buttonClass}`;
+      buttonIcon.textContent = config.icon;
+      buttonText.textContent = config.text;
+
+      // 声波动画
+      soundWaves.classList.toggle('active', newState === State.LISTENING);
+
+      // 触觉反馈模拟
+      vibrate(newState);
+    }
+
+    // 更新AI情绪
+    function updateMood(mood) {
+      currentMood = mood;
+
+      // 更新表情
+      aiFace.textContent = mood.face;
+      aiBubble.className = `ai-bubble ${mood.bubbleClass}`;
+
+      // 更新文字
+      moodText.textContent = mood.text;
+      moodText.classList.add('visible');
+
+      // 喜欢状态显示爱心
+      if (mood === Mood.LOVE) {
+        loveHearts.classList.add('active');
+        setTimeout(() => loveHearts.classList.remove('active'), 2500);
+      }
+
+      // 说话状态添加动画
+      if (currentState === State.SPEAKING) {
+        aiBubble.classList.add('speaking');
+      } else {
+        aiBubble.classList.remove('speaking');
+      }
+    }
+
+    // 触觉反馈
+    function vibrate(state) {
+      if ('vibrate' in navigator) {
+        switch (state) {
+          case State.LISTENING:
+            navigator.vibrate(50);
+            break;
+          case State.SPEAKING:
+            navigator.vibrate([20, 30, 20]);
+            break;
+          case State.ENDING:
+            navigator.vibrate(30);
+            break;
+        }
+      }
+    }
+
+    // 主按钮点击
+    function handleMainButtonClick() {
+      createRipple(event);
+
+      if (!conversationActive) {
+        startConversation();
+      } else if (currentState === State.ENDING) {
+        endConversation();
+      } else {
+        updateButtonState(State.ENDING);
+        updateMood(Mood.SLEEP);
+      }
+    }
+
+    // 开始对话
+    function startConversation() {
+      conversationActive = true;
+
+      // 隐藏欢迎消息
+      welcomeBubble.style.opacity = '0';
+
+      // 切换到聆听状态
+      updateButtonState(State.LISTENING);
+      updateMood(Mood.SURPRISED);
+
+      // 模拟对话流程
+      setTimeout(() => {
+        updateButtonState(State.SPEAKING);
+        updateMood(Mood.LOVE);
+
+        // AI说完话
+        setTimeout(() => {
+          updateButtonState(State.LISTENING);
+          updateMood(Mood.HAPPY);
+        }, 3000);
+      }, 3000);
+    }
+
+    // 结束对话
+    function endConversation() {
+      conversationActive = false;
+      updateButtonState(State.IDLE);
+      updateMood(Mood.HAPPY);
+      moodText.classList.remove('visible');
+
+      // 重新显示欢迎消息
+      setTimeout(() => {
+        welcomeBubble.style.opacity = '1';
+      }, 1000);
+    }
+
+    // 波纹效果
+    function createRipple(e) {
+      const rect = mainButton.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const ripple = document.createElement('div');
+      ripple.className = 'ripple';
+      ripple.style.left = x + 'px';
+      ripple.style.top = y + 'px';
+
+      rippleContainer.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+    }
+
+    // 切换Tab
+    function switchTab(tab) {
+      if (tab === 'explore') {
+        window.location.href = 'explore.html';
+      }
+    }
+
+    // 长按检测
+    mainButton.addEventListener('touchstart', () => {
+      if (conversationActive && currentState !== State.ENDING) {
+        longPressTimer = setTimeout(() => {
+          updateButtonState(State.ENDING);
+          updateMood(Mood.SLEEP);
+        }, 800);
+      }
+    });
+
+    mainButton.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+    });
+
+    mainButton.addEventListener('touchcancel', () => {
+      clearTimeout(longPressTimer);
+    });
+
+    // 点击AI形象切换表情（演示用）
+    aiBubble.addEventListener('click', () => {
+      const moods = [Mood.HAPPY, Mood.SURPRISED, Mood.LOVE];
+      const currentIndex = moods.indexOf(currentMood);
+      const nextMood = moods[(currentIndex + 1) % moods.length];
+      updateMood(nextMood);
+
+      if ('vibrate' in navigator) {
+        navigator.vibrate(20);
+      }
+    });
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      updateButtonState(State.IDLE);
+      updateMood(Mood.HAPPY);
+    });
+  </script>
+</body>
+</html>

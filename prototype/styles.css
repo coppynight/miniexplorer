@@ -1,0 +1,664 @@
+/*
+ * MiniExplorer UI Prototype
+ * 儿童 AI 探索伙伴 - 马卡龙色系
+ * 柔软泡泡风设计语言
+ */
+
+/* ==================== 字体导入 ==================== */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+
+/* ==================== CSS 变量 ==================== */
+:root {
+  /* 马卡龙配色 */
+  --color-primary: #7EC8E3;        /* 柔和蓝 - 主色 */
+  --color-primary-light: #B8E2F2;
+  --color-primary-dark: #5BA8C9;
+
+  --color-accent: #F8B4D9;         /* 淡粉 - 强调色 */
+  --color-accent-light: #FFCFE8;
+  --color-accent-dark: #E896C0;
+
+  --color-bg: #FFF9F0;             /* 暖白 - 背景色 */
+  --color-bg-warm: #FFF5E6;
+
+  --color-success: #98E4C9;        /* 薄荷绿 - 成功/活跃 */
+  --color-success-light: #C5F0E0;
+  --color-success-dark: #6DCFAB;
+
+  --color-recording: #FF6B6B;      /* 珊瑚红 - 录音中 */
+  --color-recording-light: #FF9B9B;
+
+  --color-inactive: #C4C4C4;       /* 浅灰 - 未激活 */
+  --color-inactive-light: #E0E0E0;
+
+  --color-text: #4A4A4A;
+  --color-text-light: #7A7A7A;
+  --color-white: #FFFFFF;
+
+  /* AI 形象渐变色 */
+  --ai-gradient-happy: linear-gradient(135deg, #7EC8E3 0%, #98E4C9 50%, #F8B4D9 100%);
+  --ai-gradient-surprised: linear-gradient(135deg, #F8B4D9 0%, #FFD93D 50%, #FF6B6B 100%);
+  --ai-gradient-love: linear-gradient(135deg, #FF6B6B 0%, #F8B4D9 100%);
+  --ai-gradient-sleep: linear-gradient(135deg, #C4C4C4 0%, #E0E0E0 50%, #B8E2F2 100%);
+
+  /* 尺寸 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --radius-xl: 40px;
+  --radius-full: 9999px;
+
+  /* 动画时长 */
+  --duration-fast: 0.15s;
+  --duration-normal: 0.3s;
+  --duration-slow: 0.5s;
+  --duration-breathing: 2s;
+  --duration-pulse: 1.5s;
+
+  /* 阴影 */
+  --shadow-soft: 0 4px 20px rgba(126, 200, 227, 0.2);
+  --shadow-medium: 0 8px 30px rgba(126, 200, 227, 0.25);
+  --shadow-glow-blue: 0 0 30px rgba(126, 200, 227, 0.5);
+  --shadow-glow-pink: 0 0 30px rgba(248, 180, 217, 0.5);
+  --shadow-glow-green: 0 0 30px rgba(152, 228, 201, 0.5);
+  --shadow-glow-red: 0 0 30px rgba(255, 107, 107, 0.5);
+}
+
+/* ==================== 基础重置 ==================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  background: var(--color-bg);
+  color: var(--color-text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ==================== 布局容器 ==================== */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+/* 安全区域适配 (iOS) */
+.safe-area-top {
+  height: env(safe-area-inset-top, 44px);
+  min-height: 44px;
+  background: transparent;
+}
+
+.safe-area-bottom {
+  height: env(safe-area-inset-bottom, 34px);
+  min-height: 20px;
+}
+
+/* ==================== 相机预览区域 ==================== */
+.camera-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 探索模式 - 全屏后置相机 */
+.camera-preview-fullscreen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #2C3E50 0%, #4A6572 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.camera-placeholder-icon {
+  width: 80px;
+  height: 80px;
+  border: 3px dashed rgba(255, 255, 255, 0.4);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.camera-placeholder-text {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 陪伴模式 - 温暖背景 */
+.companion-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(248, 180, 217, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(126, 200, 227, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(152, 228, 201, 0.2) 0%, transparent 60%),
+    linear-gradient(180deg, var(--color-bg-warm) 0%, var(--color-bg) 100%);
+}
+
+/* 前置相机小预览 (陪伴模式) */
+.camera-preview-small {
+  position: absolute;
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  width: 100px;
+  height: 140px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, #2C3E50 0%, #4A6572 100%);
+  box-shadow: var(--shadow-medium);
+  border: 3px solid var(--color-white);
+  overflow: hidden;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-preview-small .camera-placeholder-icon {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  border-width: 2px;
+}
+
+.camera-preview-small .camera-placeholder-text {
+  font-size: 10px;
+}
+
+/* ==================== AI 形象 ==================== */
+.ai-avatar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 小球悬浮 (探索模式) */
+.ai-avatar-floating {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+.ai-avatar-floating .ai-bubble {
+  width: 70px;
+  height: 70px;
+}
+
+.ai-avatar-floating .ai-face {
+  font-size: 28px;
+}
+
+/* 大球居中 (陪伴模式) */
+.ai-avatar-centered {
+  position: relative;
+  z-index: 5;
+}
+
+.ai-avatar-centered .ai-bubble {
+  width: 180px;
+  height: 180px;
+}
+
+.ai-avatar-centered .ai-face {
+  font-size: 72px;
+}
+
+/* AI 泡泡本体 */
+.ai-bubble {
+  position: relative;
+  border-radius: 50%;
+  background: var(--ai-gradient-happy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    var(--shadow-glow-blue),
+    inset 0 -10px 30px rgba(0, 0, 0, 0.1),
+    inset 0 10px 30px rgba(255, 255, 255, 0.4);
+  animation: breathing var(--duration-breathing) ease-in-out infinite;
+}
+
+/* 高光效果 */
+.ai-bubble::before {
+  content: '';
+  position: absolute;
+  top: 12%;
+  left: 18%;
+  width: 30%;
+  height: 20%;
+  background: radial-gradient(ellipse, rgba(255, 255, 255, 0.8) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+.ai-bubble::after {
+  content: '';
+  position: absolute;
+  top: 8%;
+  left: 25%;
+  width: 15%;
+  height: 10%;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  filter: blur(1px);
+}
+
+.ai-face {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  transition: transform var(--duration-normal) ease;
+}
+
+/* AI 状态 */
+.ai-bubble.happy {
+  background: var(--ai-gradient-happy);
+  box-shadow: var(--shadow-glow-blue);
+}
+
+.ai-bubble.surprised {
+  background: var(--ai-gradient-surprised);
+  box-shadow: var(--shadow-glow-pink);
+}
+
+.ai-bubble.love {
+  background: var(--ai-gradient-love);
+  box-shadow: var(--shadow-glow-pink);
+}
+
+.ai-bubble.sleep {
+  background: var(--ai-gradient-sleep);
+  box-shadow: var(--shadow-soft);
+  animation: breathing-slow 3s ease-in-out infinite;
+}
+
+.ai-bubble.speaking {
+  animation: speaking 0.3s ease infinite;
+}
+
+.ai-bubble.listening {
+  animation: listening 1s ease-in-out infinite;
+}
+
+/* ==================== 底部控制区 ==================== */
+.control-area {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  padding-bottom: var(--spacing-md);
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 30;
+}
+
+/* ==================== 主按钮 ==================== */
+.main-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border: none;
+  border-radius: var(--radius-full);
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--duration-normal) ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.main-button-icon {
+  font-size: 26px;
+}
+
+/* 空闲状态 - 说话 */
+.main-button.idle {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: var(--color-white);
+  box-shadow: var(--shadow-glow-blue);
+  animation: pulse var(--duration-pulse) ease-in-out infinite;
+}
+
+.main-button.idle:active {
+  transform: scale(0.96);
+  animation: none;
+}
+
+/* 对话中状态 - 听着呢 */
+.main-button.listening {
+  background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-dark) 100%);
+  color: var(--color-white);
+  box-shadow: var(--shadow-glow-green);
+  animation: pulse-listening var(--duration-pulse) ease-in-out infinite;
+}
+
+/* AI 回复状态 - 等等我 */
+.main-button.speaking {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: var(--color-white);
+  box-shadow: var(--shadow-glow-pink);
+  animation: none;
+}
+
+/* 结束状态 - 拜拜 */
+.main-button.ending {
+  background: linear-gradient(135deg, var(--color-inactive) 0%, #A0A0A0 100%);
+  color: var(--color-white);
+  box-shadow: var(--shadow-soft);
+  animation: none;
+}
+
+/* ==================== Tab 栏 ==================== */
+.tab-bar {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-xxl);
+  padding-top: var(--spacing-lg);
+}
+
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--duration-normal) ease;
+  border-radius: var(--radius-md);
+}
+
+.tab-item:active {
+  transform: scale(0.95);
+  background: rgba(126, 200, 227, 0.1);
+}
+
+.tab-icon {
+  font-size: 28px;
+  transition: transform var(--duration-normal) ease;
+}
+
+.tab-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-inactive);
+  transition: color var(--duration-normal) ease;
+}
+
+/* Tab 未选中 */
+.tab-item.inactive .tab-icon {
+  filter: grayscale(0.5);
+  opacity: 0.6;
+}
+
+.tab-item.inactive .tab-label {
+  color: var(--color-inactive);
+}
+
+/* Tab 选中 */
+.tab-item.active .tab-icon {
+  transform: scale(1.15);
+  filter: none;
+  animation: tab-bounce var(--duration-normal) ease;
+}
+
+.tab-item.active .tab-label {
+  color: var(--color-primary);
+}
+
+/* ==================== 拍照闪光效果 ==================== */
+.flash-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.flash-overlay.active {
+  animation: flash 0.2s linear;
+}
+
+/* ==================== 状态提示 ==================== */
+.status-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+
+/* ==================== 动画定义 ==================== */
+
+/* 呼吸动画 */
+@keyframes breathing {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.02);
+  }
+}
+
+@keyframes breathing-slow {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.01);
+  }
+}
+
+/* 说话动画 */
+@keyframes speaking {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.08);
+    filter: brightness(1.1);
+  }
+}
+
+/* 聆听动画 */
+@keyframes listening {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.03) rotate(-2deg);
+  }
+  75% {
+    transform: scale(1.03) rotate(2deg);
+  }
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: var(--shadow-glow-blue);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 40px rgba(126, 200, 227, 0.6);
+  }
+}
+
+@keyframes pulse-listening {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: var(--shadow-glow-green);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 40px rgba(152, 228, 201, 0.7);
+  }
+}
+
+/* Tab 弹跳 */
+@keyframes tab-bounce {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1.15);
+  }
+}
+
+/* 闪光 */
+@keyframes flash {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ==================== 波纹效果 ==================== */
+.ripple-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(0);
+  animation: ripple-effect 0.6s ease-out;
+}
+
+@keyframes ripple-effect {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ==================== 响应式适配 ==================== */
+@media (max-height: 700px) {
+  .ai-avatar-centered .ai-bubble {
+    width: 140px;
+    height: 140px;
+  }
+
+  .ai-avatar-centered .ai-face {
+    font-size: 56px;
+  }
+
+  .control-area {
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+
+  .main-button {
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: 18px;
+  }
+}
+
+/* 横屏提示 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app-container::after {
+    content: '请旋转设备至竖屏模式';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--color-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--color-text);
+    z-index: 1000;
+  }
+}
