@@ -5,143 +5,72 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>MiniExplorer - 儿童AI探索伙伴</title>
+  <title>小探探</title>
   <link rel="stylesheet" href="styles.css">
-  <style>
-    /* 入口页自动跳转 */
-    .loading-screen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: var(--color-bg);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 32px;
-    }
-
-    .loading-avatar {
-      width: 120px;
-      height: 120px;
-      border-radius: 50%;
-      background: var(--ai-gradient-happy);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 48px;
-      box-shadow:
-        var(--shadow-glow-blue),
-        inset 0 -10px 30px rgba(0, 0, 0, 0.1),
-        inset 0 10px 30px rgba(255, 255, 255, 0.4);
-      animation: breathing 2s ease-in-out infinite, entrance 0.6s ease-out;
-      position: relative;
-    }
-
-    .loading-avatar::before {
-      content: '';
-      position: absolute;
-      top: 12%;
-      left: 18%;
-      width: 30%;
-      height: 20%;
-      background: radial-gradient(ellipse, rgba(255, 255, 255, 0.8) 0%, transparent 70%);
-      border-radius: 50%;
-      filter: blur(2px);
-    }
-
-    .loading-avatar::after {
-      content: '';
-      position: absolute;
-      top: 8%;
-      left: 25%;
-      width: 15%;
-      height: 10%;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 50%;
-      filter: blur(1px);
-    }
-
-    .loading-text {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--color-primary);
-      animation: fade-pulse 1.5s ease-in-out infinite;
-    }
-
-    .loading-dots {
-      display: flex;
-      gap: 8px;
-    }
-
-    .loading-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--color-accent);
-      animation: dot-bounce 1.4s ease-in-out infinite;
-    }
-
-    .loading-dot:nth-child(2) {
-      animation-delay: 0.2s;
-      background: var(--color-primary);
-    }
-
-    .loading-dot:nth-child(3) {
-      animation-delay: 0.4s;
-      background: var(--color-success);
-    }
-
-    @keyframes entrance {
-      0% {
-        transform: scale(0) rotate(-180deg);
-        opacity: 0;
-      }
-      100% {
-        transform: scale(1) rotate(0);
-        opacity: 1;
-      }
-    }
-
-    @keyframes fade-pulse {
-      0%, 100% {
-        opacity: 1;
-      }
-      50% {
-        opacity: 0.6;
-      }
-    }
-
-    @keyframes dot-bounce {
-      0%, 80%, 100% {
-        transform: translateY(0);
-      }
-      40% {
-        transform: translateY(-12px);
-      }
-    }
-  </style>
 </head>
 <body>
-  <div class="loading-screen">
-    <div class="loading-avatar">
-      <span style="position: relative; z-index: 1; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));">😊</span>
+  <div class="app-container">
+    <!-- 安全区域顶部 -->
+    <div class="safe-area-top"></div>
+
+    <!-- 主界面 -->
+    <div class="home-screen">
+      <!-- 顶部留白 -->
+      <div class="home-header">
+        <div class="app-title">小探探</div>
+      </div>
+
+      <!-- AI 形象 -->
+      <div class="home-avatar">
+        <div class="avatar-glow"></div>
+        <div class="avatar-sphere">
+          <div class="avatar-face">😊</div>
+        </div>
+        <div class="avatar-greeting">你好呀！</div>
+      </div>
+
+      <!-- 功能入口 -->
+      <div class="home-actions">
+        <button class="action-card" onclick="goToExplore()">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+          </div>
+          <div class="action-label">看看这是什么</div>
+        </button>
+
+        <button class="action-card" onclick="goToCompanion()">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div class="action-label">和我聊聊天</div>
+        </button>
+      </div>
     </div>
-    <div class="loading-text">准备探索...</div>
-    <div class="loading-dots">
-      <div class="loading-dot"></div>
-      <div class="loading-dot"></div>
-      <div class="loading-dot"></div>
-    </div>
+
+    <!-- 安全区域底部 -->
+    <div class="safe-area-bottom"></div>
   </div>
 
   <script>
-    // 短暂展示后自动跳转到探索模式
-    setTimeout(() => {
+    function goToExplore() {
+      // 触觉反馈
+      if ('vibrate' in navigator) {
+        navigator.vibrate(15);
+      }
       window.location.href = 'explore.html';
-    }, 1500);
+    }
+
+    function goToCompanion() {
+      if ('vibrate' in navigator) {
+        navigator.vibrate(15);
+      }
+      window.location.href = 'companion.html';
+    }
   </script>
 </body>
 </html>
