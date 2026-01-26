@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Skill(writing-plans)",
+      "WebFetch(domain:www.coze.cn)",
+      "WebFetch(domain:www.volcengine.com)",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:openai.com)",
+      "WebFetch(domain:www.doubao.com)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:www.coze.com)",
+      "WebFetch(domain:help.aliyun.com)",
+      "WebFetch(domain:www.xfyun.cn)",
+      "WebFetch(domain:www.aliyun.com)",
+      "WebFetch(domain:platform.minimaxi.com)",
+      "WebFetch(domain:console.volcengine.com)",
+      "WebFetch(domain:cloud.baidu.com)",
+      "WebFetch(domain:cloud.tencent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:open.bigmodel.cn)",
+      "WebFetch(domain:elevenlabs.io)",
+      "WebFetch(domain:community.openai.com)",
+      "WebFetch(domain:modelscope.cn)",
+      "WebFetch(domain:livekit.io)",
+      "WebFetch(domain:www.agora.io)",
+      "WebFetch(domain:www.shengwang.cn)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(python3:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true
+  }
+}
