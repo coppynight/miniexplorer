@@ -5,6 +5,8 @@ struct ExploreView: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
+    @State private var pendingPhotoCapture: Task<Void, Never>? = nil
+
     var body: some View {
         ZStack {
             // 1. Full-screen camera
@@ -104,6 +106,11 @@ struct ExploreView: View {
         .onAppear {
             // Camera/connect is initialized when entering from Home.
         }
+        .onDisappear {
+            // Cancel any delayed capture when leaving Explore.
+            pendingPhotoCapture?.cancel()
+            pendingPhotoCapture = nil
+        }
     }
     
     // MARK: - Helpers
@@ -138,15 +145,24 @@ struct ExploreView: View {
     
     private func handleMicAction() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        
+
         if model.audio.isRecording {
+            // Stop: cancel any pending delayed capture.
+            pendingPhotoCapture?.cancel()
+            pendingPhotoCapture = nil
+
             model.stopTalking()
         } else {
             // Start
             model.startTalking()
-            // Auto capture photo when starting to talk in Explore mode
-            Task {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay to let focus settle?
+
+            // Auto-capture photo shortly after start, but cancel if user stops quickly or navigates away.
+            pendingPhotoCapture?.cancel()
+            pendingPhotoCapture = Task {
+                try? await Task.sleep(nanoseconds: 500_000_000) // let focus settle
+                guard !Task.isCancelled else { return }
+                guard model.mode == .explore else { return }
+                guard model.audio.isRecording else { return }
                 await model.captureAndSendPhoto()
             }
         }
