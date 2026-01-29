@@ -24,6 +24,9 @@ final class AppModel: ObservableObject {
 
     @Published var mode: Mode = .explore
     @Published var conversation: ConversationState = .idle
+
+    /// Prevent rapid toggle / inconsistent UI state when starting/stopping audio.
+    @Published var isMicBusy: Bool = false
     @Published var messages: [ChatMessage] = [
         ChatMessage(role: .system, text: "欢迎来到探索模式。按住说话，或拍照提问。")
     ]
@@ -114,8 +117,40 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// User intent: toggle mic (start/stop). Handles permission + race prevention.
+    func toggleTalking() {
+        Task { @MainActor in
+            guard !isMicBusy else { return }
+            isMicBusy = true
+            defer { isMicBusy = false }
+
+            if audio.isRecording {
+                stopTalking()
+                return
+            }
+
+            // Permission gate (device-only).
+            let ok = await audio.ensureRecordPermission()
+            guard ok else {
+                conversation = .error
+                messages.append(ChatMessage(role: .system, text: "麦克风权限未开启，请在设置中允许 MiniExplorer 使用麦克风"))
+                return
+            }
+
+            startTalking()
+
+            // If startRecording failed (e.g. session category/engine start error), settle to error.
+            if !audio.isRecording {
+                conversation = .error
+                let reason = audio.lastError ?? "unknown"
+                messages.append(ChatMessage(role: .system, text: "开始录音失败：\(reason)"))
+            }
+        }
+    }
+
     func startTalking() {
         guard !audio.isRecording else { return }
+
         conversation = .listening
         messages.append(ChatMessage(role: .user, text: "🎙️（开始说话…）"))
 
@@ -126,7 +161,11 @@ final class AppModel: ObservableObject {
     }
 
     func stopTalking() {
-        guard audio.isRecording else { return }
+        guard audio.isRecording else {
+            // If UI thought we're recording but audio didn't start, just normalize state.
+            if conversation == .listening { conversation = .idle }
+            return
+        }
         audio.stopRecording()
         conversation = .thinking
         realtime.completeInput()

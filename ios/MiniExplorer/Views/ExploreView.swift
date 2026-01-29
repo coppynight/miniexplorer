@@ -89,6 +89,7 @@ struct ExploreView: View {
                 Spacer()
                 MiniTabBar {
                     PrimaryMicButton(state: buttonState, action: handleMicAction)
+                        .disabled(model.isMicBusy)
                 }
             }
             .ignoresSafeArea(.container, edges: .bottom)
@@ -151,10 +152,10 @@ struct ExploreView: View {
             pendingPhotoCapture?.cancel()
             pendingPhotoCapture = nil
 
-            model.stopTalking()
+            model.toggleTalking()
         } else {
             // Start
-            model.startTalking()
+            model.toggleTalking()
 
             // Auto-capture photo shortly after start, but cancel if user stops quickly or navigates away.
             pendingPhotoCapture?.cancel()

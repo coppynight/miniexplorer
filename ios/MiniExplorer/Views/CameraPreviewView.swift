@@ -32,23 +32,30 @@ struct CameraPreviewView: View {
 private struct CameraPreviewRepresentable: UIViewRepresentable {
     let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(layer)
-        context.coordinator.layer = layer
+    func makeUIView(context: Context) -> PreviewUIView {
+        let view = PreviewUIView()
+        view.videoPreviewLayer.session = session
+        view.videoPreviewLayer.videoGravity = .resizeAspectFill
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.layer?.frame = uiView.bounds
+    func updateUIView(_ uiView: PreviewUIView, context: Context) {
+        // Session might change, though usually static in this app.
+        if uiView.videoPreviewLayer.session != session {
+            uiView.videoPreviewLayer.session = session
+        }
     }
+}
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    final class Coordinator {
-        var layer: AVCaptureVideoPreviewLayer?
+/// A UIKit view that manages the layer layout automatically.
+/// This prevents "black screen" issues where the layer frame doesn't update.
+private class PreviewUIView: UIView {
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
+    }
+    
+    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+        return layer as! AVCaptureVideoPreviewLayer
     }
 }
 #endif

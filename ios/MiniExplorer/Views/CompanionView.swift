@@ -106,6 +106,7 @@ struct CompanionView: View {
                 Spacer()
                 MiniTabBar {
                     PrimaryMicButton(state: buttonState, action: handleMicAction)
+                        .disabled(model.isMicBusy)
                 }
             }
             .ignoresSafeArea(.container, edges: .bottom)
@@ -158,11 +159,7 @@ struct CompanionView: View {
     private func handleMicAction() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         
-        if model.audio.isRecording {
-            model.stopTalking()
-        } else {
-            model.startTalking()
-        }
+        model.toggleTalking()
     }
 }
 

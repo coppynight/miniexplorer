@@ -12,6 +12,35 @@ final class AudioService: ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var lastError: String? = nil
 
+    /// Request mic permission (device only). Simulator always returns true.
+    func ensureRecordPermission() async -> Bool {
+#if targetEnvironment(simulator)
+        return true
+#else
+        let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
+        case .granted:
+            return true
+        case .denied:
+            lastError = "Microphone permission denied"
+            return false
+        case .undetermined:
+            return await withCheckedContinuation { cont in
+                session.requestRecordPermission { granted in
+                    Task { @MainActor in
+                        if !granted {
+                            self.lastError = "Microphone permission denied"
+                        }
+                        cont.resume(returning: granted)
+                    }
+                }
+            }
+        @unknown default:
+            return false
+        }
+#endif
+    }
+
     private var onAudio: ((Data) -> Void)?
 
 #if targetEnvironment(simulator)
