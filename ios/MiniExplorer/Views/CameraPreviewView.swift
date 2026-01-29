@@ -23,7 +23,7 @@ struct CameraPreviewView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
 #else
-        CameraPreviewRepresentable(session: camera.session)
+        CameraPreviewRepresentable(session: camera.captureSession)
 #endif
     }
 }

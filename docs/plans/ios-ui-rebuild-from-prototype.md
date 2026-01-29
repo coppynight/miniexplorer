@@ -36,13 +36,29 @@
 4) **运行证据**：Simulator 录屏/截图（输出到 `outputs/`，但不提交 git）
 
 ### 1.2 构建/验证命令（统一）
+> 验收时要求：**Simulator + iPhoneOS(arm64) 都能编译通过**。
+> 
+> - Simulator：正常走模拟器 SDK
+> - iPhoneOS(arm64)：用 `iphoneos` SDK 做真机架构编译；为了让“纯编译”在任何环境可复现，默认 **禁用签名**（否则会被 provisioning profile 阻塞）。
+
 ```bash
 cd /Users/xiaokai/clawd/miniexplorer/ios
+
+# 1) Simulator build
 xcodebuild -project MiniExplorer.xcodeproj \
   -scheme MiniExplorer \
   -configuration Debug \
   -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO \
+  clean build
+
+# 2) iPhoneOS arm64 compile (no signing)
+xcodebuild -project MiniExplorer.xcodeproj \
+  -scheme MiniExplorer \
+  -configuration Debug \
+  -sdk iphoneos \
+  -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO \
   clean build
 ```

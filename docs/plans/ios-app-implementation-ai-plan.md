@@ -24,19 +24,33 @@
 - App 源码：`miniexplorer/ios/MiniExplorer/`
 
 ### 构建/验证约定（重要）
-- **默认只要求“模拟器构建通过”**（避免签名/Provisioning profile 阻塞）。
-- 推荐构建命令（Phase 1+ 后续都沿用）：
-  ```bash
-  cd ios
-  xcodebuild -project MiniExplorer.xcodeproj \
-    -scheme MiniExplorer \
-    -configuration Debug \
-    -sdk iphonesimulator \
-    -destination 'generic/platform=iOS Simulator' \
-    CODE_SIGNING_ALLOWED=NO \
-    clean build
-  ```
-- 若出现签名报错：说明跑到了 `iphoneos` 或签名未禁用。优先改用上面命令。
+- 验收要求：**模拟器（iphonesimulator）+ 真机架构（iphoneos/arm64）都要编译通过**。
+- 为了让“纯编译”在任何环境可复现（不被 provisioning profile 卡住），两条命令都默认 **禁用签名**：`CODE_SIGNING_ALLOWED=NO`。
+
+推荐构建命令（Phase 1+ 后续都沿用）：
+```bash
+cd ios
+
+# 1) Simulator build
+xcodebuild -project MiniExplorer.xcodeproj \
+  -scheme MiniExplorer \
+  -configuration Debug \
+  -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO \
+  clean build
+
+# 2) iPhoneOS arm64 compile (no signing)
+xcodebuild -project MiniExplorer.xcodeproj \
+  -scheme MiniExplorer \
+  -configuration Debug \
+  -sdk iphoneos \
+  -destination 'generic/platform=iOS' \
+  CODE_SIGNING_ALLOWED=NO \
+  clean build
+```
+
+- 若出现签名报错：说明 `CODE_SIGNING_ALLOWED=NO` 没生效，或被其它 build setting 覆盖。
 - 若出现 `Multiple commands produce ... Info.plist`：说明 Info.plist 配置重复（见 Phase 1 的经验）。
 
 ### 交互阻塞约定（Claude Code / TUI）

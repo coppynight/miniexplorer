@@ -12,7 +12,11 @@ final class CameraService: NSObject, ObservableObject {
     @Published var isConfigured: Bool = false
     @Published var lastError: String? = nil
 
-    fileprivate let session = AVCaptureSession()
+    private let session = AVCaptureSession()
+
+    /// Expose the capture session for preview rendering.
+    /// We keep the underlying session `private` to control mutation.
+    var captureSession: AVCaptureSession { session }
     private let photoOutput = AVCapturePhotoOutput()
 
     private var captureContinuation: CheckedContinuation<UIImage?, Never>?
