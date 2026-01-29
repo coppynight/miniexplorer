@@ -42,16 +42,14 @@ final class AppModel: ObservableObject {
     private var didAutoSmoke = false
 #endif
 
-    func bootIfNeeded() {
+    /// Boot only the non-invasive parts (no camera, no network).
+    func bootBasicsIfNeeded() {
         guard !didBoot else { return }
         didBoot = true
 
-        // Default to explore mode.
-        applyMode(.explore)
-        connectIfNeeded()
-
 #if DEBUG
-        autoSmokeIfNeeded()
+        // NOTE: Disabled by default for UI-only review videos (no recording).
+        // autoSmokeIfNeeded()
 #endif
 
         // Observe realtime events and drive a minimal state machine.
@@ -77,18 +75,24 @@ final class AppModel: ObservableObject {
 // DEBUG auto-connect removed; connectIfNeeded() handles this.
     }
 
-    func applyMode(_ newMode: Mode) {
+    /// Enter a mode (invokes camera setup + realtime connect).
+    func enterMode(_ newMode: Mode) {
         mode = newMode
+
+        // Reset conversation UI state when switching modes.
+        conversation = .idle
+
         switch newMode {
         case .explore:
             camera.setup(position: .back)
         case .companion:
             camera.setup(position: .front)
         }
+
         connectIfNeeded()
     }
 
-    func connectIfNeeded() {
+    private func connectIfNeeded() {
         let botId: String
         switch mode {
         case .explore: botId = AppConfig.explorerBotID
@@ -147,15 +151,31 @@ final class AppModel: ObservableObject {
 #if DEBUG
     func autoSmokeIfNeeded() {
         guard !didAutoSmoke else { return }
-        guard mode == .explore else { return }
         didAutoSmoke = true
 
-        // Simple runtime evidence generator:
-        // listening -> thinking -> completed -> assistant bubble
+        // Runtime evidence generator (main flow demo):
+        // 1) Home (Explore) -> record -> stop -> assistant bubble
+        // 2) Switch to Companion -> record -> stop -> assistant bubble
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            // Ensure we start at Explore.
+            self.enterMode(.explore)
+            self.messages.append(ChatMessage(role: .system, text: "(auto-smoke) Explore flow"))
+
+            try? await Task.sleep(nanoseconds: 800_000_000)
             self.startTalking()
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            self.stopTalking()
+
+            // Wait a bit for completed event + UI settle.
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+
+            // Switch to Companion.
+            self.enterMode(.companion)
+            self.messages.append(ChatMessage(role: .system, text: "(auto-smoke) Companion flow"))
+
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            self.startTalking()
+            try? await Task.sleep(nanoseconds: 900_000_000)
             self.stopTalking()
         }
     }
