@@ -102,7 +102,7 @@ struct ExploreView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
-            model.applyMode(.explore)
+            // Camera/connect is initialized when entering from Home.
         }
     }
     

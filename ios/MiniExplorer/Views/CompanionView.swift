@@ -121,7 +121,7 @@ struct CompanionView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
-            model.applyMode(.companion)
+            // Camera/connect is initialized when entering from Home.
         }
     }
     

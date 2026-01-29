@@ -46,11 +46,13 @@ struct HomeView: View {
                     VStack(spacing: Theme.s16) {
                         ActionCard(title: "看看这是什么", systemImage: "magnifyingglass", tint: Theme.primary) {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            model.enterMode(.explore)
                             goExplore = true
                         }
 
                         ActionCard(title: "和我聊聊天", systemImage: "message", tint: Theme.secondary) {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            model.enterMode(.companion)
                             goCompanion = true
                         }
                     }
@@ -59,13 +61,11 @@ struct HomeView: View {
                     // Hidden navigation links
                     NavigationLink("", isActive: $goExplore) {
                         ExploreView(model: model)
-                            .onAppear { model.applyMode(.explore) }
                     }
                     .hidden()
 
                     NavigationLink("", isActive: $goCompanion) {
                         CompanionView(model: model)
-                            .onAppear { model.applyMode(.companion) }
                     }
                     .hidden()
                 }

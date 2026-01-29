@@ -42,13 +42,10 @@ final class AppModel: ObservableObject {
     private var didAutoSmoke = false
 #endif
 
-    func bootIfNeeded() {
+    /// Boot only the non-invasive parts (no camera, no network).
+    func bootBasicsIfNeeded() {
         guard !didBoot else { return }
         didBoot = true
-
-        // Default to explore mode.
-        applyMode(.explore)
-        connectIfNeeded()
 
 #if DEBUG
         // NOTE: Disabled by default for UI-only review videos (no recording).
@@ -78,18 +75,24 @@ final class AppModel: ObservableObject {
 // DEBUG auto-connect removed; connectIfNeeded() handles this.
     }
 
-    func applyMode(_ newMode: Mode) {
+    /// Enter a mode (invokes camera setup + realtime connect).
+    func enterMode(_ newMode: Mode) {
         mode = newMode
+
+        // Reset conversation UI state when switching modes.
+        conversation = .idle
+
         switch newMode {
         case .explore:
             camera.setup(position: .back)
         case .companion:
             camera.setup(position: .front)
         }
+
         connectIfNeeded()
     }
 
-    func connectIfNeeded() {
+    private func connectIfNeeded() {
         let botId: String
         switch mode {
         case .explore: botId = AppConfig.explorerBotID
@@ -155,7 +158,7 @@ final class AppModel: ObservableObject {
         // 2) Switch to Companion -> record -> stop -> assistant bubble
         Task { @MainActor in
             // Ensure we start at Explore.
-            self.applyMode(.explore)
+            self.enterMode(.explore)
             self.messages.append(ChatMessage(role: .system, text: "(auto-smoke) Explore flow"))
 
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -167,7 +170,7 @@ final class AppModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_400_000_000)
 
             // Switch to Companion.
-            self.applyMode(.companion)
+            self.enterMode(.companion)
             self.messages.append(ChatMessage(role: .system, text: "(auto-smoke) Companion flow"))
 
             try? await Task.sleep(nanoseconds: 800_000_000)

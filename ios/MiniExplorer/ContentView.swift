@@ -15,7 +15,7 @@ struct ContentView: View {
         NavigationStack {
             HomeView(model: model)
         }
-        .onAppear { model.bootIfNeeded() }
+        .onAppear { model.bootBasicsIfNeeded() }
     }
 }
 
