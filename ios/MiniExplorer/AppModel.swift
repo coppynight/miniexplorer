@@ -51,7 +51,8 @@ final class AppModel: ObservableObject {
         connectIfNeeded()
 
 #if DEBUG
-        autoSmokeIfNeeded()
+        // NOTE: Disabled by default for UI-only review videos (no recording).
+        // autoSmokeIfNeeded()
 #endif
 
         // Observe realtime events and drive a minimal state machine.
@@ -147,15 +148,31 @@ final class AppModel: ObservableObject {
 #if DEBUG
     func autoSmokeIfNeeded() {
         guard !didAutoSmoke else { return }
-        guard mode == .explore else { return }
         didAutoSmoke = true
 
-        // Simple runtime evidence generator:
-        // listening -> thinking -> completed -> assistant bubble
+        // Runtime evidence generator (main flow demo):
+        // 1) Home (Explore) -> record -> stop -> assistant bubble
+        // 2) Switch to Companion -> record -> stop -> assistant bubble
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            // Ensure we start at Explore.
+            self.applyMode(.explore)
+            self.messages.append(ChatMessage(role: .system, text: "(auto-smoke) Explore flow"))
+
+            try? await Task.sleep(nanoseconds: 800_000_000)
             self.startTalking()
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            self.stopTalking()
+
+            // Wait a bit for completed event + UI settle.
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+
+            // Switch to Companion.
+            self.applyMode(.companion)
+            self.messages.append(ChatMessage(role: .system, text: "(auto-smoke) Companion flow"))
+
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            self.startTalking()
+            try? await Task.sleep(nanoseconds: 900_000_000)
             self.stopTalking()
         }
     }
