@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>MiniExplorer 需要使用相机来拍摄照片和视频，帮助你与 Claude 进行视觉交流。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MiniExplorer 需要使用麦克风来录制语音消息，实现语音对话功能。</string>
+</dict>
+</plist>

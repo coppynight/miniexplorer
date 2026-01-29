@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coze Bridge</title>
+</head>
+<body>
+<script>
+  // Minimal bridge bootstrap (Phase 2.1). No external deps yet.
+  // Notify Swift that the bridge is ready.
+  function post(type, payload){
+    try {
+      window.webkit?.messageHandlers?.cozeBridge?.postMessage({ type, payload });
+    } catch (e) {
+      // no-op
+    }
+  }
+
+  post('ready', { ts: Date.now(), version: 'bridge-minimal-0.1' });
+</script>
+<script src="coze-bridge.js"></script>
+</body>
+</html>
