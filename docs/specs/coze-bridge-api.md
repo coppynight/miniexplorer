@@ -37,13 +37,26 @@ JS must expose `window.MiniExplorerBridge`.
 
 ```ts
 interface MiniExplorerBridge {
-  connect(config: { baseUrl: string; token: string; botId: string }): { ok: boolean };
+  connect(config: {
+    baseUrl: string;
+    token: string;
+    botId: string;
+    voiceId?: string;
+    connectorId?: string;
+    debug?: boolean;
+  }): { ok: boolean };
   sendAudio(base64: string): void;
-  sendImage(url: string): void;
+  sendImage(payload: { fileId?: string; fileUrl?: string } | string): void;
   complete(): void;
   disconnect(): void;
 }
 ```
+
+**Notes (Realtime SDK):**
+- Current JS bridge uses `@coze/realtime-api` in the WKWebView.
+- `sendAudio(base64)` does **not** upload raw PCM yet; it simply ensures the WebView mic is unmuted via `setAudioEnable(true)`.
+- `sendImage` expects a `fileId` from Coze Files API (`/v1/files/upload`). If only `fileUrl` is provided, it sends an `image` object with `file_url`.
+- Native audio streaming → Coze will be wired later when the realtime SDK exposes a raw-audio ingest path.
 
 ## Acceptance (Evidence Chain)
 1) File exists: `docs/specs/coze-bridge-api.md`

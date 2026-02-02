@@ -6,18 +6,27 @@
   <title>Coze Bridge</title>
 </head>
 <body>
-<script>
-  // Minimal bridge bootstrap (Phase 2.1). No external deps yet.
-  // Notify Swift that the bridge is ready.
-  function post(type, payload){
+<script type="module">
+  // Load Coze Realtime SDK (frontend only)
+  async function loadSDK() {
+    const post = (type, payload) => {
+      try {
+        window.webkit?.messageHandlers?.cozeBridge?.postMessage({ type, payload });
+      } catch (e) {
+        // no-op
+      }
+    };
+
     try {
-      window.webkit?.messageHandlers?.cozeBridge?.postMessage({ type, payload });
+      const module = await import('https://esm.sh/@coze/realtime-api@1.3.2');
+      window.MiniExplorerCoze = module;
+      post('ready', { ts: Date.now(), version: 'coze-realtime-1.3.2' });
     } catch (e) {
-      // no-op
+      post('error', { message: 'SDK load failed', detail: String(e) });
     }
   }
 
-  post('ready', { ts: Date.now(), version: 'bridge-minimal-0.1' });
+  loadSDK();
 </script>
 <script src="coze-bridge.js"></script>
 </body>

@@ -6,6 +6,9 @@ struct HomeView: View {
 
     @State private var goExplore = false
     @State private var goCompanion = false
+    @State private var showConnectivityAlert = false
+    @State private var connectivityMessage: String = ""
+    @State private var isTestingConnectivity = false
 
 #if DEBUG
     @State private var didAutoDemo = false
@@ -24,10 +27,35 @@ struct HomeView: View {
                     .frame(height: 12)
 
                 VStack(alignment: .leading, spacing: Theme.s16) {
-                    Text("小探探")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.top, Theme.s16)
+                    HStack {
+                        Text("小探探")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Theme.textSecondary)
+
+                        Spacer()
+
+                        Button {
+                            Task { @MainActor in
+                                guard !isTestingConnectivity else { return }
+                                isTestingConnectivity = true
+                                connectivityMessage = await model.testCozeConnection()
+                                showConnectivityAlert = true
+                                isTestingConnectivity = false
+                            }
+                        } label: {
+                            if isTestingConnectivity {
+                                ProgressView()
+                                    .tint(Theme.textSecondary)
+                            } else {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("测试 Coze 连接")
+                    }
+                    .padding(.top, Theme.s16)
 
                     Spacer(minLength: 0)
 
@@ -73,6 +101,11 @@ struct HomeView: View {
             }
         }
         .navigationBarHidden(true)
+        .alert("Coze 连通性", isPresented: $showConnectivityAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(connectivityMessage)
+        }
 #if DEBUG
         .task {
             // UI-only demo: Home -> Explore -> back -> Companion -> back

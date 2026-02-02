@@ -4,6 +4,7 @@ import SwiftUI
 struct CompanionView: View {
     @ObservedObject var model: AppModel
     @State private var suppressTap: Bool = false
+    @State private var longPressActive: Bool = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -102,6 +103,18 @@ struct CompanionView: View {
             }
             .safeAreaInset(edge: .top, content: { Color.clear.frame(height: 10) })
 
+            // 4.5 Error banner
+            VStack {
+                if let error = model.errorMessage {
+                    NoticeBanner(text: error, style: .error) {
+                        model.errorMessage = nil
+                    }
+                }
+                Spacer()
+            }
+            .padding(.top, 80)
+            .padding(.horizontal, Theme.s16)
+
             // 5. Bottom Control Bar
             VStack {
                 Spacer()
@@ -112,29 +125,26 @@ struct CompanionView: View {
                         }
                     })
                         .disabled(model.isMicBusy)
-                        .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 24, pressing: { isPressing in
-                            if isPressing {
-                                suppressTap = true
-                                handleMicAction()
-                            } else if model.audio.isRecording {
-                                handleMicAction()
+                        .onLongPressGesture(minimumDuration: 0.25, maximumDistance: 24, pressing: { isPressing in
+                            if !isPressing, longPressActive {
+                                if model.audio.isRecording {
+                                    handleMicAction()
+                                }
+                                longPressActive = false
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     suppressTap = false
                                 }
                             }
-                        }, perform: {})
+                        }, perform: {
+                            longPressActive = true
+                            suppressTap = true
+                            handleMicAction()
+                        })
                 }
             }
             .ignoresSafeArea(.container, edges: .bottom)
 
-            // 6. Bridge (Debug only)
-            #if DEBUG
-            VStack {
-                BridgeWebView(service: model.realtime)
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
-            }
-            #endif
+            // (bridge moved to ContentView)
         }
         .navigationBarHidden(true)
         .onAppear {

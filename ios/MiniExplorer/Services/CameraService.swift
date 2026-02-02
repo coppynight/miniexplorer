@@ -1,3 +1,4 @@
+import Foundation
 import AVFoundation
 import Combine
 import SwiftUI
@@ -79,30 +80,79 @@ final class CameraService: NSObject, ObservableObject {
 #endif
     }
 
-    /// Phase 3.2: Upload stub (evidence-chain friendly).
+    /// Phase 3.2: Upload photo to Coze Files API.
     ///
-    /// For now we persist the image to a temp directory and return a file:// URL.
-    /// This is reproducible on Simulator and Device and doesn't require network.
-    func uploadPhoto(_ image: UIImage) async -> URL? {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("MiniExplorerUploads", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let name = "photo-\(Int(Date().timeIntervalSince1970)).jpg"
-            let url = dir.appendingPathComponent(name)
+    /// Returns a Coze file_id for realtime image messages.
+    func uploadPhoto(_ image: UIImage) async -> UploadedFile? {
+        guard let data = image.jpegData(compressionQuality: 0.85) else {
+            lastError = "jpeg encode failed"
+            return nil
+        }
 
-            guard let data = image.jpegData(compressionQuality: 0.85) else {
-                lastError = "jpeg encode failed"
+        let token = AppConfig.cozeAccessToken
+        if token.isEmpty || token == "YOUR_TOKEN" {
+            lastError = "missing Coze access token"
+            return nil
+        }
+
+        guard let url = URL(string: "\(AppConfig.cozeAPIBase)/v1/files/upload") else {
+            lastError = "invalid Coze base URL"
+            return nil
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n")
+        body.appendString("Content-Type: image/jpeg\r\n\r\n")
+        body.append(data)
+        body.appendString("\r\n--\(boundary)--\r\n")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        do {
+            let (respData, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                lastError = "upload failed (no response)"
                 return nil
             }
-            try data.write(to: url, options: .atomic)
+            guard (200...299).contains(http.statusCode) else {
+                lastError = "upload failed (status \(http.statusCode))"
+                return nil
+            }
+
+            let decoded = try JSONDecoder().decode(FileUploadResponse.self, from: respData)
+            if let code = decoded.code, code != 0 {
+                lastError = decoded.msg ?? "upload failed (code \(code))"
+                return nil
+            }
+            guard let file = decoded.data else {
+                lastError = "upload failed (empty data)"
+                return nil
+            }
+
             lastError = nil
-            NSLog("[CameraService] uploadPhoto -> %@", url.absoluteString)
-            return url
+            NSLog("[CameraService] uploadPhoto file_id=%@", file.id)
+            return file
+        } catch let error as URLError where error.code == .cancelled {
+            lastError = "upload cancelled"
+            NSLog("[CameraService] uploadPhoto cancelled")
+            return nil
         } catch {
             lastError = String(describing: error)
             NSLog("[CameraService] uploadPhoto error: %@", String(describing: error))
             return nil
         }
+    }
+
+    private struct FileUploadResponse: Decodable {
+        let code: Int?
+        let msg: String?
+        let data: UploadedFile?
     }
 
     // MARK: - Simulator helpers
@@ -150,3 +200,11 @@ extension CameraService: AVCapturePhotoCaptureDelegate {
     }
 }
 #endif
+
+private extension Data {
+    mutating func appendString(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+}
