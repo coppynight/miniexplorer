@@ -1,55 +1,31 @@
-# MiniExplorer — 真机验证清单（Phase 6.2）
+# Device Checklist — MiniExplorer
 
-> 目的：把只能在真机验证的点列成 checklist，便于复盘与回归。
-> 建议：每次改动音频/相机/权限逻辑后都按此清单跑一遍。
+- **Date**: 2026-02-02
+- **Purpose**: Real-device verification checklist for camera/mic/speaker.
 
-## 0. 准备
-- [ ] Xcode 选中真机（已信任此 Mac）
-- [ ] 真机已开启麦克风/相机权限（若曾拒绝：设置 → MiniExplorer → 允许）
-- [ ] AppConfig 已填好（或已接入 Keychain/本地配置）：
-  - [ ] Coze access token
-  - [ ] Explore botId
-  - [ ] Companion botId
+## Permissions
+- [ ] First launch prompts for Camera and Microphone appear.
+- [ ] User can grant permissions and app continues without crash.
+- [ ] Denying permissions shows a clear in-app message.
 
-## 1. 安装与启动
-- [ ] 安装/运行成功（不闪退）
-- [ ] 首次启动无异常日志（可接受少量 warning）
+## Camera
+- [ ] Explore mode shows **back camera** preview.
+- [ ] Companion mode shows **front camera** preview.
+- [ ] Capture photo returns a valid image (non-empty).
 
-## 2. 权限弹窗（首次）
-- [ ] 相机权限弹窗出现，文案正确
-- [ ] 麦克风权限弹窗出现，文案正确
-- [ ] 允许后相机预览正常
-- [ ] 允许后录音正常
+## Microphone / Recording
+- [ ] Long-press mic button starts recording (haptic + UI state).
+- [ ] Recording chunks are sent to realtime service (log visible).
+- [ ] Releasing mic stops recording and triggers completion.
 
-## 3. Explore（探索模式）
-### 3.1 相机
-- [ ] 默认后摄
-- [ ] 预览画面流畅
-- [ ] 点击“拍照”后流程正常
-- [ ] 上传 stub（file://）或真实上传（若已接入）返回 URL
-- [ ] 发送图片到 realtime（观察日志/回复气泡）
+## Speaker / Playback
+- [ ] Audio response plays through speaker.
+- [ ] `isPlaying` state toggles correctly.
 
-### 3.2 音频对话
-- [ ] 点击/长按录音按钮开始录音（Listening）
-- [ ] 松开/停止后进入 Thinking
-- [ ] 收到回复后进入 Speaking（或至少追加 assistant 气泡）
-- [ ] 最终回到 Idle
-- [ ] 录音过程中无明显爆音/断裂（主观）
+## Connectivity
+- [ ] Switching Explore/Companion reconnects to correct botId.
+- [ ] Network drop shows error state and retries/reconnects.
 
-## 4. Companion（陪伴模式）
-### 4.1 前置预览
-- [ ] 默认前摄
-- [ ] 小窗口预览正常
-
-### 4.2 音频对话
-- [ ] 录音开始/停止流程正常
-- [ ] 回复气泡追加正常
-
-## 5. 音频播放（若已接入 TTS/音频返回）
-- [ ] 播放走扬声器（或符合预期的输出设备）
-- [ ] 中断/来电/切后台后行为合理（不崩溃）
-
-## 6. 回归项
-- [ ] Tab 切换不会重复创建 service（无多连接/重复日志爆炸）
-- [ ] 冷启动/热启动都可用
-- [ ] 连续录音 3 次不崩溃
+## Stability
+- [ ] Background → foreground does not break session.
+- [ ] Rapid mode switching does not crash or deadlock.
