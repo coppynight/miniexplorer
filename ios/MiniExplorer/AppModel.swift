@@ -105,6 +105,7 @@ final class AppModel: ObservableObject {
         // Avoid spamming connect calls.
         guard connectedBotId != botId else { return }
         connectedBotId = botId
+        NSLog("[ModeSwitch] switching botId -> %@", botId)
 
         Task {
             do {

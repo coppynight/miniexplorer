@@ -88,8 +88,15 @@ struct ExploreView: View {
             VStack {
                 Spacer()
                 MiniTabBar {
-                    PrimaryMicButton(state: buttonState, action: handleMicAction)
+                    PrimaryMicButton(state: buttonState, action: {})
                         .disabled(model.isMicBusy)
+                        .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 24, pressing: { isPressing in
+                            if isPressing {
+                                handleMicAction()
+                            } else if model.audio.isRecording {
+                                handleMicAction()
+                            }
+                        }, perform: {})
                 }
             }
             .ignoresSafeArea(.container, edges: .bottom)
