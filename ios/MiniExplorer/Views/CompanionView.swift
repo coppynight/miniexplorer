@@ -3,6 +3,7 @@ import SwiftUI
 /// Phase 7: Companion mode (UI matching prototype/companion.html).
 struct CompanionView: View {
     @ObservedObject var model: AppModel
+    @State private var suppressTap: Bool = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -105,13 +106,21 @@ struct CompanionView: View {
             VStack {
                 Spacer()
                 MiniTabBar {
-                    PrimaryMicButton(state: buttonState, action: {})
+                    PrimaryMicButton(state: buttonState, action: {
+                        if !suppressTap {
+                            handleMicAction()
+                        }
+                    })
                         .disabled(model.isMicBusy)
                         .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 24, pressing: { isPressing in
                             if isPressing {
+                                suppressTap = true
                                 handleMicAction()
                             } else if model.audio.isRecording {
                                 handleMicAction()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    suppressTap = false
+                                }
                             }
                         }, perform: {})
                 }
