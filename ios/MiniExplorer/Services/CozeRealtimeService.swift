@@ -5,7 +5,7 @@ import WebKit
 /// Phase 2.3: Swift-side service wrapper around the WKWebView bridge.
 /// Focus: (1) load local bridge HTML, (2) receive JS events, (3) call JS APIs via evaluateJavaScript.
 @MainActor
-final class CozeRealtimeService: NSObject, ObservableObject {
+final class CozeRealtimeService: NSObject, ObservableObject, WKUIDelegate {
     @Published var isConnected: Bool = false
     @Published var lastEvent: String = ""
     @Published var lastEventType: String = ""
@@ -22,11 +22,18 @@ final class CozeRealtimeService: NSObject, ObservableObject {
         if let webView { return webView }
 
         let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        if #available(iOS 15.0, *) {
+            config.defaultWebpagePreferences.allowsContentJavaScript = true
+        }
+
         let controller = WKUserContentController()
         controller.add(self, name: "cozeBridge")
         config.userContentController = controller
 
         let wv = WKWebView(frame: .zero, configuration: config)
+        wv.uiDelegate = self
         wv.isOpaque = false
         wv.backgroundColor = .clear
         self.webView = wv
@@ -52,9 +59,11 @@ final class CozeRealtimeService: NSObject, ObservableObject {
         let voiceId: String?
         let connectorId: String?
         let debug: Bool?
+        let enableVideo: Bool?
+        let videoInputDeviceId: String?
     }
 
-    func connect(botId: String) async throws {
+    func connect(botId: String, enableVideo: Bool = false, videoInputDeviceId: String? = nil) async throws {
         _ = makeWebView()
         loadBridge()
         let ready = await waitForBridgeReady()
@@ -68,7 +77,9 @@ final class CozeRealtimeService: NSObject, ObservableObject {
             botId: botId,
             voiceId: normalizedVoiceId(),
             connectorId: AppConfig.cozeConnectorId,
-            debug: true
+            debug: true,
+            enableVideo: enableVideo,
+            videoInputDeviceId: videoInputDeviceId
         )
         _ = try await callJS(function: "connect", arg: cfg)
         let connected = await waitForConnected()
@@ -86,10 +97,11 @@ final class CozeRealtimeService: NSObject, ObservableObject {
     struct SendImagePayload: Codable {
         let fileId: String
         let fileUrl: String?
+        let prompt: String?
     }
 
-    func sendImage(_ file: UploadedFile) {
-        let payload = SendImagePayload(fileId: file.id, fileUrl: nil)
+    func sendImage(_ file: UploadedFile, prompt: String? = nil) {
+        let payload = SendImagePayload(fileId: file.id, fileUrl: nil, prompt: prompt)
         Task { _ = try? await callJS(function: "sendImage", arg: payload) }
     }
 
@@ -200,5 +212,18 @@ extension CozeRealtimeService: WKScriptMessageHandler {
         }
 
         NSLog("[CozeBridge] %@", String(describing: message.body))
+    }
+}
+
+@available(iOS 15.0, *)
+extension CozeRealtimeService {
+    func webView(
+        _ webView: WKWebView,
+        requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+        initiatedByFrame frame: WKFrameInfo,
+        type: WKMediaCaptureType,
+        decisionHandler: @escaping (WKPermissionDecision) -> Void
+    ) {
+        decisionHandler(.grant)
     }
 }

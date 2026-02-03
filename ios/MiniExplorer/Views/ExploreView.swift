@@ -14,8 +14,17 @@ struct ExploreView: View {
             // 1. Full-screen camera
             Color.black.ignoresSafeArea()
             
-            CameraPreviewView(camera: model.camera)
-                .ignoresSafeArea()
+            if AppConfig.useRealtimeVideo {
+                BridgeWebView(service: model.realtime)
+                    .ignoresSafeArea()
+            } else {
+                CameraPreviewView(camera: model.camera)
+                    .ignoresSafeArea()
+
+                BridgeWebView(service: model.realtime)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+            }
             
             // Viewfinder overlay
             VStack {
@@ -204,15 +213,17 @@ struct ExploreView: View {
             // Start
             model.toggleTalking()
 
-            // Auto-capture photo shortly after start, but cancel if user stops quickly or navigates away.
-            pendingPhotoCapture?.cancel()
-            pendingPhotoCapture = Task {
-                try? await Task.sleep(nanoseconds: 500_000_000) // let focus settle
-                guard !Task.isCancelled else { return }
-                guard model.mode == .explore else { return }
-                guard model.audio.isRecording else { return }
-                Task { @MainActor in
-                    await model.captureAndSendPhoto()
+            // Auto-capture photo shortly after start (only when using native camera).
+            if !AppConfig.useRealtimeVideo {
+                pendingPhotoCapture?.cancel()
+                pendingPhotoCapture = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // let focus settle
+                    guard !Task.isCancelled else { return }
+                    guard model.mode == .explore else { return }
+                    guard model.audio.isRecording else { return }
+                    Task { @MainActor in
+                        await model.captureAndSendPhoto()
+                    }
                 }
             }
         }

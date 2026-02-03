@@ -114,11 +114,13 @@ final class AppModel: ObservableObject {
         errorMessage = nil
         realtime.lastErrorMessage = nil
 
-        switch newMode {
-        case .explore:
-            camera.setup(position: .back)
-        case .companion:
-            camera.setup(position: .front)
+        if !AppConfig.useRealtimeVideo {
+            switch newMode {
+            case .explore:
+                camera.setup(position: .back)
+            case .companion:
+                camera.setup(position: .front)
+            }
         }
 
         connectIfNeeded()
@@ -138,7 +140,9 @@ final class AppModel: ObservableObject {
 
         Task {
             do {
-                try await realtime.connect(botId: botId)
+                let enableVideo = AppConfig.useRealtimeVideo
+                let videoDevice: String? = enableVideo ? (mode == .explore ? "environment" : "user") : nil
+                try await realtime.connect(botId: botId, enableVideo: enableVideo, videoInputDeviceId: videoDevice)
 #if DEBUG
                 messages.append(ChatMessage(role: .system, text: "已连接 bot: \(botId)"))
 #endif
@@ -202,6 +206,9 @@ final class AppModel: ObservableObject {
     }
 
     func captureAndSendPhoto() async {
+        if AppConfig.useRealtimeVideo {
+            return
+        }
         let img = await camera.capturePhoto()
         guard let img else {
             reportError("拍照失败")
@@ -221,14 +228,19 @@ final class AppModel: ObservableObject {
 
         if !realtime.isConnected {
             let targetBot = connectedBotId ?? (mode == .explore ? AppConfig.explorerBotID : AppConfig.companionBotID)
-            try? await realtime.connect(botId: targetBot)
+            let enableVideo = AppConfig.useRealtimeVideo
+            let videoDevice: String? = enableVideo ? (mode == .explore ? "environment" : "user") : nil
+            try? await realtime.connect(botId: targetBot, enableVideo: enableVideo, videoInputDeviceId: videoDevice)
         }
-        realtime.sendImage(file)
+        realtime.sendImage(file, prompt: "请看看这张图片并回答")
 
         if AppConfig.useChatImageFallback {
             let targetBot = connectedBotId ?? (mode == .explore ? AppConfig.explorerBotID : AppConfig.companionBotID)
             Task { @MainActor in
                 if let reply = await self.analyzeImageWithChat(botId: targetBot, fileId: file.id) {
+                    if reply.contains("看不到") || reply.contains("无法看到") || reply.contains("不能看见") {
+                        self.reportError("Bot 未开启视觉能力或不支持图片输入")
+                    }
                     self.messages.append(ChatMessage(role: .assistant, text: reply))
                 }
             }

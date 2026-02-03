@@ -86,11 +86,16 @@
         return { ok: false, error: 'missing_config' };
       }
 
+      const wantsVideo = !!config.enableVideo;
       try {
-        const permission = await RealtimeUtils.checkDevicePermission();
+        const permission = await RealtimeUtils.checkDevicePermission(wantsVideo);
         if (!permission?.audio) {
           post('error', { message: 'mic_permission_denied' });
           return { ok: false, error: 'mic_permission_denied' };
+        }
+        if (wantsVideo && !permission?.video) {
+          post('error', { message: 'camera_permission_denied' });
+          return { ok: false, error: 'camera_permission_denied' };
         }
       } catch (e) {
         post('error', { message: 'mic_permission_error', detail: String(e) });
@@ -105,12 +110,31 @@
         allowPersonalAccessTokenInBrowser: true,
         audioMutedDefault: true,
         debug: !!config.debug,
-        ...(config.connectorId ? { connectorId: config.connectorId } : {})
+        ...(config.connectorId ? { connectorId: config.connectorId } : {}),
+        ...(wantsVideo ? {
+          videoConfig: {
+            renderDom: 'local-player',
+            videoOnDefault: true,
+            videoInputDeviceId: config.videoInputDeviceId || undefined
+          }
+        } : {})
       };
 
       client = new RealtimeClient(clientConfig);
       bindEvents(EventNames);
       await client.connect();
+
+      if (wantsVideo) {
+        try {
+          await client.setVideoEnable(true);
+          if (config.videoInputDeviceId) {
+            await client.setVideoInputDevice(config.videoInputDeviceId);
+          }
+        } catch (e) {
+          post('error', { message: 'video_enable_failed', detail: String(e) });
+        }
+      }
+
       return { ok: true };
     } catch (e) {
       post('error', { message: 'connect_failed', detail: String(e) });
@@ -145,11 +169,13 @@
 
     let fileId = null;
     let fileUrl = null;
+    let prompt = null;
     if (typeof payload === 'string') {
       fileUrl = payload;
     } else if (payload && typeof payload === 'object') {
       fileId = payload.fileId || payload.file_id || payload.id || null;
       fileUrl = payload.fileUrl || payload.file_url || payload.url || null;
+      prompt = payload.prompt || payload.text || null;
     }
 
     if (!fileId && !fileUrl) {
@@ -158,13 +184,14 @@
     }
 
     const imageItem = fileId ? { type: 'image', file_id: fileId } : { type: 'image', file_url: fileUrl };
+    const items = prompt ? [imageItem, { type: 'text', text: String(prompt) }] : [imageItem];
     const message = {
       id: `msg_${Date.now()}`,
       event_type: 'conversation.message.create',
       data: {
         role: 'user',
         content_type: 'object_string',
-        content: JSON.stringify([imageItem])
+        content: JSON.stringify(items)
       }
     };
 

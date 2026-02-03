@@ -51,7 +51,7 @@ struct AudioTestView: View {
                 .buttonStyle(.borderedProminent)
 
                 Button("Connect") {
-                    Task { try? await realtime.connect(botId: AppConfig.explorerBotID) }
+                    Task { try? await realtime.connect(botId: AppConfig.explorerBotID, enableVideo: false) }
                 }
                 .buttonStyle(.bordered)
 
@@ -75,7 +75,7 @@ struct AudioTestView: View {
 #if DEBUG
             // Auto-run once to generate runtime evidence.
             try? await Task.sleep(nanoseconds: 200_000_000)
-            try? await realtime.connect(botId: AppConfig.explorerBotID)
+            try? await realtime.connect(botId: AppConfig.explorerBotID, enableVideo: false)
             try? await Task.sleep(nanoseconds: 200_000_000)
             audio.startRecording { data in
                 realtime.sendAudio(data)

@@ -12,15 +12,8 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
 
     var body: some View {
-        ZStack {
-            NavigationStack {
-                HomeView(model: model)
-            }
-
-            BridgeWebView(service: model.realtime)
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .allowsHitTesting(false)
+        NavigationStack {
+            HomeView(model: model)
         }
         .onAppear { model.bootBasicsIfNeeded() }
     }

@@ -44,6 +44,8 @@ interface MiniExplorerBridge {
     voiceId?: string;
     connectorId?: string;
     debug?: boolean;
+    enableVideo?: boolean;
+    videoInputDeviceId?: string;
   }): { ok: boolean };
   sendAudio(base64: string): void;
   sendImage(payload: { fileId?: string; fileUrl?: string } | string): void;

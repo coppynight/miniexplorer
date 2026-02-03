@@ -11,6 +11,13 @@ struct CompanionView: View {
         ZStack {
             // 1. Warm Background
             Theme.bgWarm.ignoresSafeArea()
+
+            if AppConfig.useRealtimeVideo {
+                BridgeWebView(service: model.realtime)
+                    .ignoresSafeArea()
+                    .opacity(0.01)
+                    .allowsHitTesting(false)
+            }
             
             // Subtle gradient overlay
             LinearGradient(
@@ -52,23 +59,31 @@ struct CompanionView: View {
             .padding(.bottom, 120)
 
             // 3. PIP Camera (Front)
-            VStack {
-                HStack {
+            if !AppConfig.useRealtimeVideo {
+                VStack {
+                    HStack {
+                        Spacer()
+                        CameraPreviewView(camera: model.camera)
+                            .frame(width: 80, height: 110)
+                            .background(Color.black)
+                            .cornerRadius(Theme.r12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.r12)
+                                    .stroke(Theme.surface, lineWidth: 2)
+                            )
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                            .padding(.trailing, Theme.s24)
+                            .padding(.top, 60) // Extra spacing from top
+                    }
                     Spacer()
-                    CameraPreviewView(camera: model.camera)
-                        .frame(width: 80, height: 110)
-                        .background(Color.black)
-                        .cornerRadius(Theme.r12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.r12)
-                                .stroke(Theme.surface, lineWidth: 2)
-                        )
-                        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                        .padding(.trailing, Theme.s24)
-                        .padding(.top, 60) // Extra spacing from top
                 }
-                Spacer()
+
+                BridgeWebView(service: model.realtime)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
             }
+
+            // (BridgeWebView is shown above when realtime video is enabled)
 
             // 4. Top Navigation
             VStack {
