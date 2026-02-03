@@ -25,6 +25,16 @@
     throw new Error('sdk_timeout');
   }
 
+  function applyMirror(enabled){
+    const root = document.documentElement;
+    if (!root) return;
+    if (enabled) {
+      root.classList.add('mirror');
+    } else {
+      root.classList.remove('mirror');
+    }
+  }
+
   function extractText(event){
     const payload = event?.data || event?.message || event?.payload || event;
     if (!payload) return null;
@@ -87,6 +97,7 @@
       }
 
       const wantsVideo = !!config.enableVideo;
+      applyMirror(!!config.mirrorVideo && wantsVideo);
       try {
         const permission = await RealtimeUtils.checkDevicePermission(wantsVideo);
         if (!permission?.audio) {

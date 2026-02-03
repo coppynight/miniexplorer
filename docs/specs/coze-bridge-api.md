@@ -46,6 +46,7 @@ interface MiniExplorerBridge {
     debug?: boolean;
     enableVideo?: boolean;
     videoInputDeviceId?: string;
+    mirrorVideo?: boolean; // apply horizontal flip to local video preview
   }): { ok: boolean };
   sendAudio(base64: string): void;
   sendImage(payload: { fileId?: string; fileUrl?: string } | string): void;

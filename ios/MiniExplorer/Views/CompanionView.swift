@@ -12,13 +12,6 @@ struct CompanionView: View {
             // 1. Warm Background
             Theme.bgWarm.ignoresSafeArea()
 
-            if AppConfig.useRealtimeVideo {
-                BridgeWebView(service: model.realtime)
-                    .ignoresSafeArea()
-                    .opacity(0.01)
-                    .allowsHitTesting(false)
-            }
-            
             // Subtle gradient overlay
             LinearGradient(
                 colors: [Theme.secondary.opacity(0.05), Theme.primary.opacity(0.05), Theme.bgWarm],
@@ -59,31 +52,21 @@ struct CompanionView: View {
             .padding(.bottom, 120)
 
             // 3. PIP Camera (Front)
-            if !AppConfig.useRealtimeVideo {
-                VStack {
-                    HStack {
-                        Spacer()
-                        CameraPreviewView(camera: model.camera)
-                            .frame(width: 80, height: 110)
-                            .background(Color.black)
-                            .cornerRadius(Theme.r12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.r12)
-                                    .stroke(Theme.surface, lineWidth: 2)
-                            )
-                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                            .padding(.trailing, Theme.s24)
-                            .padding(.top, 60) // Extra spacing from top
-                    }
-                    Spacer()
+            if AppConfig.useRealtimeVideo {
+                cameraPip {
+                    BridgeWebView(service: model.realtime)
+                        .allowsHitTesting(false)
+                }
+            } else {
+                cameraPip {
+                    CameraPreviewView(camera: model.camera)
+                        .allowsHitTesting(false)
                 }
 
                 BridgeWebView(service: model.realtime)
                     .frame(width: 1, height: 1)
                     .opacity(0.01)
             }
-
-            // (BridgeWebView is shown above when realtime video is enabled)
 
             // 4. Top Navigation
             VStack {
@@ -168,6 +151,28 @@ struct CompanionView: View {
     }
     
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func cameraPip<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack {
+            HStack {
+                Spacer()
+                content()
+                    .frame(width: 80, height: 110)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.r12))
+                    .clipped()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.r12)
+                            .stroke(Theme.surface, lineWidth: 2)
+                    )
+                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    .padding(.trailing, Theme.s24)
+                    .padding(.top, 60) // Extra spacing from top
+            }
+            Spacer()
+        }
+    }
     
     private var buttonState: PrimaryMicButton.State {
         switch model.conversation {

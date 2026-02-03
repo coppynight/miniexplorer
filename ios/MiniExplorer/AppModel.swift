@@ -142,7 +142,13 @@ final class AppModel: ObservableObject {
             do {
                 let enableVideo = AppConfig.useRealtimeVideo
                 let videoDevice: String? = enableVideo ? (mode == .explore ? "environment" : "user") : nil
-                try await realtime.connect(botId: botId, enableVideo: enableVideo, videoInputDeviceId: videoDevice)
+                let mirrorVideo: Bool? = enableVideo ? (mode == .explore) : nil
+                try await realtime.connect(
+                    botId: botId,
+                    enableVideo: enableVideo,
+                    videoInputDeviceId: videoDevice,
+                    mirrorVideo: mirrorVideo
+                )
 #if DEBUG
                 messages.append(ChatMessage(role: .system, text: "已连接 bot: \(botId)"))
 #endif
@@ -230,7 +236,13 @@ final class AppModel: ObservableObject {
             let targetBot = connectedBotId ?? (mode == .explore ? AppConfig.explorerBotID : AppConfig.companionBotID)
             let enableVideo = AppConfig.useRealtimeVideo
             let videoDevice: String? = enableVideo ? (mode == .explore ? "environment" : "user") : nil
-            try? await realtime.connect(botId: targetBot, enableVideo: enableVideo, videoInputDeviceId: videoDevice)
+            let mirrorVideo: Bool? = enableVideo ? (mode == .explore) : nil
+            try? await realtime.connect(
+                botId: targetBot,
+                enableVideo: enableVideo,
+                videoInputDeviceId: videoDevice,
+                mirrorVideo: mirrorVideo
+            )
         }
         realtime.sendImage(file, prompt: "请看看这张图片并回答")
 

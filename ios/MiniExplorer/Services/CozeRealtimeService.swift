@@ -61,9 +61,15 @@ final class CozeRealtimeService: NSObject, ObservableObject, WKUIDelegate {
         let debug: Bool?
         let enableVideo: Bool?
         let videoInputDeviceId: String?
+        let mirrorVideo: Bool?
     }
 
-    func connect(botId: String, enableVideo: Bool = false, videoInputDeviceId: String? = nil) async throws {
+    func connect(
+        botId: String,
+        enableVideo: Bool = false,
+        videoInputDeviceId: String? = nil,
+        mirrorVideo: Bool? = nil
+    ) async throws {
         _ = makeWebView()
         loadBridge()
         let ready = await waitForBridgeReady()
@@ -79,7 +85,8 @@ final class CozeRealtimeService: NSObject, ObservableObject, WKUIDelegate {
             connectorId: AppConfig.cozeConnectorId,
             debug: true,
             enableVideo: enableVideo,
-            videoInputDeviceId: videoInputDeviceId
+            videoInputDeviceId: videoInputDeviceId,
+            mirrorVideo: mirrorVideo
         )
         _ = try await callJS(function: "connect", arg: cfg)
         let connected = await waitForConnected()
