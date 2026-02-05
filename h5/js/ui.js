@@ -2,38 +2,15 @@ function $(id) {
   return document.getElementById(id);
 }
 
-function appendMessage({ role, text }) {
-  const container = $('messages');
-  if (!container) return;
-  const el = document.createElement('div');
-  el.className = `msg ${role}`;
-  el.textContent = text;
-  container.appendChild(el);
-
-  // Keep only last N messages
-  const MAX = 6;
-  while (container.children.length > MAX) {
-    container.removeChild(container.firstChild);
-  }
-}
-
-function setStatus(text) {
-  const el = $('status-display');
-  if (el) el.textContent = text;
-}
+// ==================== Common Helpers ====================
 
 function speak(text) {
   if (!text) return;
   if (!('speechSynthesis' in window)) return;
-
-  // iOS Safari: speechSynthesis often requires user gesture;
-  // but calling it after a gesture-triggered flow usually works.
   try {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-CN';
-    u.rate = 1.0;
-    u.pitch = 1.0;
     window.speechSynthesis.speak(u);
   } catch (_) {}
 }
@@ -42,99 +19,207 @@ function bindPressAndHold(btn, { onStart, onEnd }) {
   let pressed = false;
 
   const start = async (e) => {
-    e?.preventDefault?.();
+    // Prevent default to stop scrolling/selection
+    if (e.type !== 'mousedown') e.preventDefault?.(); 
     if (pressed) return;
     pressed = true;
     await onStart?.();
   };
 
   const end = async (e) => {
-    e?.preventDefault?.();
+    if (e.type !== 'mouseup' && e.type !== 'mouseleave') e.preventDefault?.();
     if (!pressed) return;
     pressed = false;
     await onEnd?.();
   };
 
-  // Touch
   btn.addEventListener('touchstart', start, { passive: false });
   btn.addEventListener('touchend', end, { passive: false });
   btn.addEventListener('touchcancel', end, { passive: false });
-
-  // Mouse fallback
+  
   btn.addEventListener('mousedown', start);
   btn.addEventListener('mouseup', end);
   btn.addEventListener('mouseleave', end);
 }
 
-export function initUI(app) {
-  const btn = $('record-btn');
-  if (!btn) throw new Error('record-btn not found');
+// ==================== Explore Mode Logic ====================
 
-  appendMessage({ role: 'system', text: '欢迎来到探索模式。按住说话会截取当前画面并发送给 AI。' });
-  setStatus('Ready');
+function initExploreUI(app) {
+  const btn = $('explore-btn');
+  const btnIcon = $('explore-btn-icon');
+  const btnText = $('explore-btn-text');
+  const status = $('explore-status');
+  const aiFace = $('explore-ai-face');
+  const aiDot = $('explore-ai-dot');
+  const waves = $('explore-waves');
+
+  const setExploreState = (state) => {
+    // states: idle, listening, speaking
+    btn.className = `main-btn ${state}`;
+    aiDot.className = `ai-indicator-dot ${state}`;
+    
+    if (state === 'idle') {
+      btnIcon.textContent = '🎤';
+      btnText.textContent = '按住说话';
+      aiFace.textContent = '😊';
+      waves.classList.remove('active');
+    } else if (state === 'listening') {
+      btnIcon.textContent = '🎵';
+      btnText.textContent = '听着呢...';
+      aiFace.textContent = '😮';
+      status.textContent = '我在听...';
+      waves.classList.add('active');
+    } else if (state === 'speaking') {
+      btnIcon.textContent = '💬';
+      btnText.textContent = '思考中...';
+      aiFace.textContent = '🥰';
+      waves.classList.remove('active');
+    }
+  };
 
   let capturedImage = null;
 
   bindPressAndHold(btn, {
     onStart: async () => {
-      btn.classList.add('recording');
-      setStatus('Requesting permissions...');
-
-      // Warm-up permissions under user gesture
-      await app.camera.start();
+      setExploreState('listening');
+      
+      // Warm up audio
       await app.audio.ensureStream();
 
-      setStatus('Capturing frame...');
+      // Capture frame immediately
       try {
         capturedImage = await app.camera.captureFrame();
+        // Flash effect
+        const flash = $('flash');
+        flash.classList.add('active');
+        setTimeout(() => flash.classList.remove('active'), 200);
       } catch (e) {
+        console.warn('Capture failed', e);
         capturedImage = null;
       }
 
-      setStatus('Recording...');
-      appendMessage({ role: 'user', text: '🎙️（说话中…）' });
       await app.audio.start();
     },
 
     onEnd: async () => {
-      btn.classList.remove('recording');
-      setStatus('Stopping...');
+      setExploreState('speaking');
+      status.textContent = '思考中...';
 
       const audioBlob = await app.audio.stop();
       const imageBlob = capturedImage;
       capturedImage = null;
 
       if (!audioBlob) {
-        setStatus('录音失败（没有拿到音频）');
-        appendMessage({ role: 'system', text: '⚠️ 录音失败：没有拿到音频数据。' });
+        status.textContent = '录音失败';
+        setExploreState('idle');
         return;
       }
 
-      setStatus('Uploading + chatting...');
       try {
         const { replyText, debug } = await app.coze.runChat({
-          imageBlob,
+          imageBlob, // Explore mode sends image
           audioBlob
         });
 
-        const text = replyText || '（未返回文本）';
-        appendMessage({ role: 'assistant', text });
-        setStatus('Done');
-
+        const text = replyText || '（没听清）';
+        status.textContent = text; // Show text in status bar for now
         speak(text);
+        
+        // Reset after a while
+        setTimeout(() => {
+            if (status.textContent === text) status.textContent = '对准想看的东西';
+            setExploreState('idle');
+        }, 5000);
 
-        // Expose for debugging
-        window.__MINIEXPLORER_DEBUG__ = debug;
       } catch (e) {
-        const msg = String(e?.message || e);
-        setStatus('Error');
-        appendMessage({ role: 'system', text: `⚠️ ${msg}` });
+        status.textContent = '出错: ' + e.message;
+        setExploreState('idle');
       }
     }
   });
+}
 
-  // First tap hint to unlock audio on iOS
-  btn.addEventListener('click', () => {
-    // no-op; this user gesture can help unlock speechSynthesis.
+// ==================== Companion Mode Logic ====================
+
+function initCompanionUI(app) {
+  const btn = $('companion-btn');
+  const btnIcon = $('companion-btn-icon');
+  const btnText = $('companion-btn-text');
+  const status = $('companion-status');
+  const sphere = $('companion-sphere');
+  const face = $('companion-face');
+  const waves = $('companion-waves');
+
+  const setCompState = (state) => {
+    btn.className = `main-btn ${state}`;
+    // Reset sphere classes
+    sphere.className = 'companion-sphere'; 
+    if (state !== 'idle') sphere.classList.add(state);
+
+    if (state === 'idle') {
+      btnIcon.textContent = '💬';
+      btnText.textContent = '按住聊天';
+      face.textContent = '😊';
+      waves.classList.remove('active');
+    } else if (state === 'listening') {
+      btnIcon.textContent = '👂';
+      btnText.textContent = '听着呢...';
+      face.textContent = '😮';
+      status.textContent = '我在听...';
+      waves.classList.add('active');
+    } else if (state === 'speaking') {
+      btnIcon.textContent = '💭';
+      btnText.textContent = '思考中...';
+      face.textContent = '🥰';
+      waves.classList.remove('active');
+    }
+  };
+
+  bindPressAndHold(btn, {
+    onStart: async () => {
+      setCompState('listening');
+      await app.audio.ensureStream();
+      await app.audio.start();
+    },
+
+    onEnd: async () => {
+      setCompState('speaking');
+      status.textContent = '思考中...';
+
+      const audioBlob = await app.audio.stop();
+
+      if (!audioBlob) {
+        status.textContent = '录音失败';
+        setCompState('idle');
+        return;
+      }
+
+      try {
+        // Companion mode: NO image, just audio
+        const { replyText } = await app.coze.runChat({
+          imageBlob: null, 
+          audioBlob
+        });
+
+        const text = replyText || '（没听清）';
+        status.textContent = text;
+        speak(text);
+
+        // Reset
+        setTimeout(() => {
+             if (status.textContent === text) status.textContent = '想聊什么？';
+             setCompState('idle');
+        }, 5000);
+
+      } catch (e) {
+        status.textContent = '出错: ' + e.message;
+        setCompState('idle');
+      }
+    }
   });
+}
+
+export function initUI(app) {
+  initExploreUI(app);
+  initCompanionUI(app);
 }

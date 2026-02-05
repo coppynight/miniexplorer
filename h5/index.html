@@ -2,38 +2,161 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MiniExplorer H5</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>小探探 MiniExplorer</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Screen management */
+        .screen {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+        .screen.active {
+            display: flex;
+        }
+    </style>
 </head>
 <body>
-    <div id="app">
-        <header class="app-header">
-            <h1>MiniExplorer</h1>
-        </header>
-        
-        <main class="app-main">
-            <!-- Camera View -->
-            <div id="camera-container">
-                <video id="camera-preview" autoplay playsinline muted></video>
-                <canvas id="photo-canvas" style="display: none;"></canvas>
+    <div class="app-container">
+        <!-- HOME SCREEN -->
+        <div id="screen-home" class="screen active home-screen">
+            <div class="safe-area-top"></div>
+            
+            <header class="home-header">
+                <h1 class="app-title">小探探 MiniExplorer</h1>
+            </header>
+
+            <div class="home-avatar">
+                <div class="avatar-glow"></div>
+                <div class="avatar-sphere">
+                    <div class="avatar-face">😊</div>
+                </div>
+                <div class="avatar-greeting">你好呀！我是小探探</div>
+            </div>
+
+            <div class="home-actions">
+                <div class="action-card" onclick="app.router.go('explore')">
+                    <div class="action-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                    </div>
+                    <span class="action-label">看看这个（探索模式）</span>
+                </div>
+
+                <div class="action-card" onclick="app.router.go('companion')">
+                    <div class="action-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </div>
+                    <span class="action-label">聊聊天（陪伴模式）</span>
+                </div>
             </div>
             
-            <!-- UI Overlays -->
-            <div id="ui-layer">
-                <div id="status-display">Ready</div>
-                <div id="messages"></div>
-            </div>
-        </main>
+            <div class="safe-area-bottom"></div>
+        </div>
 
-        <footer class="app-footer">
-            <button id="record-btn" class="action-btn" aria-label="按住说话">
-                <span class="btn-label">按住说话</span>
-            </button>
-        </footer>
+        <!-- EXPLORE SCREEN (Modified from prototype/explore.html) -->
+        <div id="screen-explore" class="screen function-screen">
+            <!-- Navbar -->
+            <div class="nav-bar">
+                <button class="nav-back" onclick="app.router.go('home')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 18l-6-6 6-6"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Main Area -->
+            <div class="main-area">
+                <div class="camera-fullscreen">
+                    <video id="camera-preview" autoplay playsinline muted></video>
+                    <!-- Viewfinder overlay -->
+                    <div class="camera-viewfinder">
+                        <div class="camera-corner tl"></div>
+                        <div class="camera-corner tr"></div>
+                        <div class="camera-corner bl"></div>
+                        <div class="camera-corner br"></div>
+                    </div>
+                </div>
+
+                <!-- AI Indicator -->
+                <div class="ai-indicator">
+                    <div class="ai-indicator-dot" id="explore-ai-dot">
+                        <span class="avatar-face" id="explore-ai-face">😊</span>
+                    </div>
+                    <div class="ai-indicator-text" id="explore-status">对准想看的东西</div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="control-bar">
+                <!-- Sound waves animation container -->
+                <div class="sound-waves" id="explore-waves">
+                    <div class="sound-wave"></div>
+                    <div class="sound-wave"></div>
+                    <div class="sound-wave"></div>
+                </div>
+
+                <button class="main-btn idle" id="explore-btn">
+                    <span class="main-btn-icon" id="explore-btn-icon">🎤</span>
+                    <span id="explore-btn-text">按住说话</span>
+                </button>
+            </div>
+
+            <!-- Flash overlay -->
+            <div class="flash-overlay" id="flash"></div>
+        </div>
+
+        <!-- COMPANION SCREEN (Modified from prototype/companion.html) -->
+        <div id="screen-companion" class="screen function-screen">
+            <div class="companion-bg"></div>
+            
+            <div class="nav-bar">
+                <button class="nav-back" onclick="app.router.go('home')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 18l-6-6 6-6"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Front Camera PiP -->
+            <div class="camera-pip">
+                <!-- Placeholder if no camera -->
+                <span class="camera-pip-placeholder">📷</span>
+                <video id="companion-preview" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;"></video>
+            </div>
+
+            <div class="main-area">
+                <div class="companion-avatar">
+                    <div class="companion-sphere" id="companion-sphere">
+                        <div class="avatar-face" id="companion-face">😊</div>
+                    </div>
+                    <div class="companion-status" id="companion-status">想聊什么？</div>
+                </div>
+            </div>
+
+            <div class="control-bar">
+                <div class="sound-waves" id="companion-waves">
+                    <div class="sound-wave"></div>
+                    <div class="sound-wave"></div>
+                    <div class="sound-wave"></div>
+                </div>
+
+                <button class="main-btn idle" id="companion-btn">
+                    <span class="main-btn-icon" id="companion-btn-icon">💬</span>
+                    <span id="companion-btn-text">按住聊天</span>
+                </button>
+            </div>
+        </div>
     </div>
 
-    <!-- Application Scripts -->
+    <!-- Hidden canvas for capture -->
+    <canvas id="photo-canvas" style="display: none;"></canvas>
+
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
