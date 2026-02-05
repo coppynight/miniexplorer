@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MiniExplorer H5</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <header class="app-header">
+            <h1>MiniExplorer</h1>
+        </header>
+        
+        <main class="app-main">
+            <!-- Camera View -->
+            <div id="camera-container">
+                <video id="camera-preview" autoplay playsinline muted></video>
+                <canvas id="photo-canvas" style="display: none;"></canvas>
+            </div>
+            
+            <!-- UI Overlays -->
+            <div id="ui-layer">
+                <div id="status-display">Ready</div>
+                <div id="messages"></div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <button id="record-btn" class="action-btn" aria-label="按住说话">
+                <span class="btn-label">按住说话</span>
+            </button>
+        </footer>
+    </div>
+
+    <!-- Application Scripts -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
