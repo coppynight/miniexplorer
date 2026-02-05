@@ -70,7 +70,8 @@ async function createChat({ imageFileId, audioFileId, promptText }) {
         content
       }
     ],
-    auto_save_history: false
+    auto_save_history: false,
+    stream: false
   };
 
   const resp = await fetch(`${baseUrl}/v3/chat`, {
@@ -192,23 +193,4 @@ export function initCoze() {
         : null;
 
       const { chatId, conversationId } = await createChat({
-        imageFileId: imageUp?.fileId,
-        audioFileId: audioUp?.fileId,
-        promptText
-      });
-
-      const st = await pollChatStatus({ conversationId, chatId });
-      if (!st.ok) {
-        throw new Error(`chat_status_${st.status}`);
-      }
-
-      const reply = await fetchAssistantReply({ conversationId, chatId });
-      return {
-        replyText: reply.text,
-        conversationId,
-        chatId,
-        debug: { cfg, imageUp, audioUp, status: st, reply }
-      };
-    }
-  };
-}
+        imageFileId: imageUp?.fileId,\n        audioFileId: audioUp?.fileId,\n        promptText\n      });\n\n      const st = await pollChatStatus({ conversationId, chatId });\n      if (!st.ok) {\n        throw new Error(`chat_status_${st.status}`);\n      }\n\n      const reply = await fetchAssistantReply({ conversationId, chatId });\n      return {\n        replyText: reply.text,\n        conversationId,\n        chatId,\n        debug: { cfg, imageUp, audioUp, status: st, reply }\n      };\n    }\n  };\n}\n
