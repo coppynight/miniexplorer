@@ -1,6 +1,6 @@
 import { initCamera } from './camera.js';
 import { initAudio } from './audio.js';
-import { initCoze } from './coze.js';
+import { initCoze } from './coze.js?v=20260206-1';
 import { initUI } from './ui.js'; // We'll refactor this next
 
 class Router {
