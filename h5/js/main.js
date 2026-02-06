@@ -1,6 +1,6 @@
 import { initCamera } from './camera.js';
 import { initAudio } from './audio.js';
-import { initCoze } from './coze.js?v=20260206-1';
+import { initCoze } from './coze.js?v=handsfree-1';
 import { createUI } from './ui.js';
 import { ConversationEngine } from './engine.js';
 
