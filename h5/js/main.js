@@ -1,7 +1,8 @@
 import { initCamera } from './camera.js';
 import { initAudio } from './audio.js';
 import { initCoze } from './coze.js?v=20260206-1';
-import { initUI } from './ui.js'; // We'll refactor this next
+import { createUI } from './ui.js';
+import { ConversationEngine } from './engine.js';
 
 class Router {
   constructor(app) {
@@ -10,38 +11,25 @@ class Router {
   }
 
   async go(screenId) {
-    // Teardown previous screen
+    // Stop conversation engine when leaving mode screens
     if (this.currentScreen === 'explore' || this.currentScreen === 'companion') {
-      await this.app.camera.stop();
-      this.app.audio.stop(); // Stop any pending recording
+      await this.app.engine.stop();
     }
 
     // Hide all
     document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-    
+
     // Show new
     const target = document.getElementById(`screen-${screenId}`);
     if (target) target.classList.add('active');
-    
+
     this.currentScreen = screenId;
 
-    // Setup new screen
+    // Enter unified flow
     if (screenId === 'explore') {
-      // Explore: back camera, preview in #camera-preview
-      try {
-        await this.app.camera.start({ facingMode: 'environment', elementId: 'camera-preview' });
-      } catch (e) {
-        console.error('Explore camera failed', e);
-        alert('相机启动失败: ' + e.message);
-      }
+      await this.app.engine.enterMode({ mode: 'explore', cameraFacing: 'environment' });
     } else if (screenId === 'companion') {
-      // Companion: front camera, preview in #companion-preview
-      try {
-        await this.app.camera.start({ facingMode: 'user', elementId: 'companion-preview' });
-      } catch (e) {
-        console.error('Companion camera failed', e);
-        // Companion can work without camera? Maybe. For now alert.
-      }
+      await this.app.engine.enterMode({ mode: 'companion', cameraFacing: 'user' });
     }
   }
 }
@@ -56,14 +44,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const coze = initCoze();
 
     const app = { camera, audio, coze };
+    app.ui = createUI();
+    app.engine = new ConversationEngine({ app, ui: app.ui });
     app.router = new Router(app);
 
     // Make global for onclick handlers in HTML
     window.app = app;
 
-    // Init UI Logic (bind buttons etc)
-    // We will update ui.js to export initExploreUI and initCompanionUI
-    initUI(app); 
+    // Bind permission overlay start buttons
+    const bindStart = (mode) => {
+      const root = document.getElementById(`screen-${mode}`);
+      const btn = root?.querySelector('.permission-overlay button');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        try {
+          await app.engine.startAfterUserGesture();
+        } catch (e) {
+          app.ui.setCameraHint(String(e?.message || e));
+        }
+      });
+    };
+    bindStart('explore');
+    bindStart('companion');
 
     console.log('Ready');
   } catch (error) {

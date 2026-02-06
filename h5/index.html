@@ -92,19 +92,22 @@
                 </div>
             </div>
 
-            <!-- Controls -->
-            <div class="control-bar">
-                <!-- Sound waves animation container -->
+            <!-- Controls (button removed; only show subtle waves) -->
+            <div class="control-bar" style="background: transparent; box-shadow: none;">
                 <div class="sound-waves" id="explore-waves">
                     <div class="sound-wave"></div>
                     <div class="sound-wave"></div>
                     <div class="sound-wave"></div>
                 </div>
+            </div>
 
-                <button class="main-btn idle" id="explore-btn">
-                    <span class="main-btn-icon" id="explore-btn-icon">🎤</span>
-                    <span id="explore-btn-text">按住说话</span>
-                </button>
+            <!-- Permission Overlay -->
+            <div class="permission-overlay" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.25);backdrop-filter:blur(12px);z-index:999;">
+              <div style="background:rgba(255,255,255,0.92);border-radius:24px;padding:24px 18px;max-width:320px;width:86%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.12);">
+                <div style="font-weight:700;font-size:16px;margin-bottom:8px;">开始对话</div>
+                <div style="font-size:13px;color:#556;line-height:1.4;margin-bottom:16px;">需要麦克风权限；相机可选（未授权也能聊天）。</div>
+                <button class="main-btn idle" style="width:100%;">开始</button>
+              </div>
             </div>
 
             <!-- Flash overlay -->
@@ -139,17 +142,21 @@
                 </div>
             </div>
 
-            <div class="control-bar">
+            <div class="control-bar" style="background: transparent; box-shadow: none;">
                 <div class="sound-waves" id="companion-waves">
                     <div class="sound-wave"></div>
                     <div class="sound-wave"></div>
                     <div class="sound-wave"></div>
                 </div>
+            </div>
 
-                <button class="main-btn idle" id="companion-btn">
-                    <span class="main-btn-icon" id="companion-btn-icon">💬</span>
-                    <span id="companion-btn-text">按住聊天</span>
-                </button>
+            <!-- Permission Overlay -->
+            <div class="permission-overlay" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.12);backdrop-filter:blur(12px);z-index:999;">
+              <div style="background:rgba(255,255,255,0.92);border-radius:24px;padding:24px 18px;max-width:320px;width:86%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.10);">
+                <div style="font-weight:700;font-size:16px;margin-bottom:8px;">开始对话</div>
+                <div style="font-size:13px;color:#556;line-height:1.4;margin-bottom:16px;">需要麦克风权限；相机可选。</div>
+                <button class="main-btn idle" style="width:100%;">开始</button>
+              </div>
             </div>
         </div>
     </div>
