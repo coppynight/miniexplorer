@@ -16,6 +16,11 @@ enum AppConfig {
 
     static let cozeAPIBase = "https://api.coze.cn"
     static let cozeAccessToken = "YOUR_TOKEN" // TODO: load from Keychain / secure storage
+    static let cozeConnectorId = "YOUR_CONNECTOR_ID" // Required for Realtime SDK
+    static let cozeVoiceId = "" // Optional (TTS voice). Leave empty if not using.
+    static let useWebViewMicOnly = true // Avoid native mic conflicts; WebView handles mic via Realtime SDK.
+    static let useRealtimeVideo = true // Enable Realtime video stream for vision.
+    static let useChatImageFallback = true // Use Chat API to parse images if realtime doesn't respond.
 
     // 探索模式 Bot
     static let explorerBotID = "YOUR_EXPLORER_BOT_ID"

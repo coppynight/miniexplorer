@@ -76,6 +76,15 @@ final class AudioService: ObservableObject {
             }
         }
 #else
+        if AppConfig.useWebViewMicOnly {
+            isRecording = true
+            NSLog("[AudioService] startRecording webview-mic-only")
+            Task { @MainActor in
+                self.onAudio?(Data())
+            }
+            return
+        }
+
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
@@ -115,13 +124,17 @@ final class AudioService: ObservableObject {
         timer = nil
         NSLog("[AudioService] stopRecording simulator")
 #else
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        if sessionActive {
-            try? AVAudioSession.sharedInstance().setActive(false)
-            sessionActive = false
+        if AppConfig.useWebViewMicOnly {
+            NSLog("[AudioService] stopRecording webview-mic-only")
+        } else {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            if sessionActive {
+                try? AVAudioSession.sharedInstance().setActive(false)
+                sessionActive = false
+            }
+            NSLog("[AudioService] stopRecording device")
         }
-        NSLog("[AudioService] stopRecording device")
 #endif
         isRecording = false
     }

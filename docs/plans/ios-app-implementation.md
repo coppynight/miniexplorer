@@ -215,8 +215,8 @@ enum AppConfig {
 <head><meta charset="UTF-8"></head>
 <body>
 <script type="module">
-import { WebsocketsChat } from 'https://unpkg.com/@coze/api@latest/dist/index.esm.js';
-window.CozeWebsocketsChat = WebsocketsChat;
+import { RealtimeClient, EventNames, RealtimeUtils } from 'https://esm.sh/@coze/realtime-api@1.3.2';
+window.MiniExplorerCoze = { RealtimeClient, EventNames, RealtimeUtils };
 </script>
 <script src="coze-bridge.js"></script>
 </body>
@@ -276,7 +276,7 @@ class CameraService: NSObject, ObservableObject {
 
     func setup(position: AVCaptureDevice.Position)
     func capturePhoto() async -> UIImage?
-    func uploadPhoto(_ image: UIImage) async -> URL?
+    func uploadPhoto(_ image: UIImage) async -> UploadedFile?
 }
 ```
 

@@ -4,13 +4,14 @@ import SwiftUI
 struct CompanionView: View {
     @ObservedObject var model: AppModel
     @State private var suppressTap: Bool = false
+    @State private var longPressActive: Bool = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
             // 1. Warm Background
             Theme.bgWarm.ignoresSafeArea()
-            
+
             // Subtle gradient overlay
             LinearGradient(
                 colors: [Theme.secondary.opacity(0.05), Theme.primary.opacity(0.05), Theme.bgWarm],
@@ -51,22 +52,20 @@ struct CompanionView: View {
             .padding(.bottom, 120)
 
             // 3. PIP Camera (Front)
-            VStack {
-                HStack {
-                    Spacer()
-                    CameraPreviewView(camera: model.camera)
-                        .frame(width: 80, height: 110)
-                        .background(Color.black)
-                        .cornerRadius(Theme.r12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.r12)
-                                .stroke(Theme.surface, lineWidth: 2)
-                        )
-                        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                        .padding(.trailing, Theme.s24)
-                        .padding(.top, 60) // Extra spacing from top
+            if AppConfig.useRealtimeVideo {
+                cameraPip {
+                    BridgeWebView(service: model.realtime)
+                        .allowsHitTesting(false)
                 }
-                Spacer()
+            } else {
+                cameraPip {
+                    CameraPreviewView(camera: model.camera)
+                        .allowsHitTesting(false)
+                }
+
+                BridgeWebView(service: model.realtime)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
             }
 
             // 4. Top Navigation
@@ -102,6 +101,18 @@ struct CompanionView: View {
             }
             .safeAreaInset(edge: .top, content: { Color.clear.frame(height: 10) })
 
+            // 4.5 Error banner
+            VStack {
+                if let error = model.errorMessage {
+                    NoticeBanner(text: error, style: .error) {
+                        model.errorMessage = nil
+                    }
+                }
+                Spacer()
+            }
+            .padding(.top, 80)
+            .padding(.horizontal, Theme.s16)
+
             // 5. Bottom Control Bar
             VStack {
                 Spacer()
@@ -112,29 +123,26 @@ struct CompanionView: View {
                         }
                     })
                         .disabled(model.isMicBusy)
-                        .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 24, pressing: { isPressing in
-                            if isPressing {
-                                suppressTap = true
-                                handleMicAction()
-                            } else if model.audio.isRecording {
-                                handleMicAction()
+                        .onLongPressGesture(minimumDuration: 0.25, maximumDistance: 24, pressing: { isPressing in
+                            if !isPressing, longPressActive {
+                                if model.audio.isRecording {
+                                    handleMicAction()
+                                }
+                                longPressActive = false
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     suppressTap = false
                                 }
                             }
-                        }, perform: {})
+                        }, perform: {
+                            longPressActive = true
+                            suppressTap = true
+                            handleMicAction()
+                        })
                 }
             }
             .ignoresSafeArea(.container, edges: .bottom)
 
-            // 6. Bridge (Debug only)
-            #if DEBUG
-            VStack {
-                BridgeWebView(service: model.realtime)
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
-            }
-            #endif
+            // (bridge moved to ContentView)
         }
         .navigationBarHidden(true)
         .onAppear {
@@ -143,6 +151,28 @@ struct CompanionView: View {
     }
     
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func cameraPip<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack {
+            HStack {
+                Spacer()
+                content()
+                    .frame(width: 80, height: 110)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.r12))
+                    .clipped()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.r12)
+                            .stroke(Theme.surface, lineWidth: 2)
+                    )
+                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    .padding(.trailing, Theme.s24)
+                    .padding(.top, 60) // Extra spacing from top
+            }
+            Spacer()
+        }
+    }
     
     private var buttonState: PrimaryMicButton.State {
         switch model.conversation {

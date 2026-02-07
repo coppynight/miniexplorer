@@ -7,14 +7,24 @@ struct ExploreView: View {
 
     @State private var pendingPhotoCapture: Task<Void, Never>? = nil
     @State private var suppressTap: Bool = false
+    @State private var longPressActive: Bool = false
 
     var body: some View {
         ZStack {
             // 1. Full-screen camera
             Color.black.ignoresSafeArea()
             
-            CameraPreviewView(camera: model.camera)
-                .ignoresSafeArea()
+            if AppConfig.useRealtimeVideo {
+                BridgeWebView(service: model.realtime)
+                    .ignoresSafeArea()
+            } else {
+                CameraPreviewView(camera: model.camera)
+                    .ignoresSafeArea()
+
+                BridgeWebView(service: model.realtime)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+            }
             
             // Viewfinder overlay
             VStack {
@@ -49,6 +59,22 @@ struct ExploreView: View {
                 }
                 .padding(.bottom, 140) // Position above control bar
             }
+
+            // 2.5 Recent messages (top-left, avoid covering viewfinder)
+            VStack(alignment: .leading) {
+                if !visibleMessages.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.s8) {
+                        ForEach(visibleMessages) { message in
+                            ChatBubbleView(message: message)
+                        }
+                    }
+                    .transition(.opacity)
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 90)
+            .padding(.horizontal, Theme.s16)
 
             // 3. Top Navigation
             VStack {
@@ -85,6 +111,18 @@ struct ExploreView: View {
             }
             .safeAreaInset(edge: .top, content: { Color.clear.frame(height: 10) })
 
+            // 3.5 Error banner
+            VStack {
+                if let error = model.errorMessage {
+                    NoticeBanner(text: error, style: .error) {
+                        model.errorMessage = nil
+                    }
+                }
+                Spacer()
+            }
+            .padding(.top, 80)
+            .padding(.horizontal, Theme.s16)
+
             // 4. Bottom Control Bar
             VStack {
                 Spacer()
@@ -95,29 +133,27 @@ struct ExploreView: View {
                         }
                     })
                         .disabled(model.isMicBusy)
-                        .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 24, pressing: { isPressing in
-                            if isPressing {
-                                suppressTap = true
-                                handleMicAction()
-                            } else if model.audio.isRecording {
-                                handleMicAction()
+                        .onLongPressGesture(minimumDuration: 0.25, maximumDistance: 24, pressing: { isPressing in
+                            if !isPressing, longPressActive {
+                                if model.audio.isRecording {
+                                    handleMicAction()
+                                }
+                                longPressActive = false
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     suppressTap = false
                                 }
                             }
-                        }, perform: {})
+                        }, perform: {
+                            // Long-press to talk (push-to-talk). Tap still toggles.
+                            longPressActive = true
+                            suppressTap = true
+                            handleMicAction()
+                        })
                 }
             }
             .ignoresSafeArea(.container, edges: .bottom)
             
-            // 5. Bridge (Debug only - keep alive)
-            #if DEBUG
-            VStack {
-                BridgeWebView(service: model.realtime)
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
-            }
-            #endif
+            // (bridge moved to ContentView)
         }
         .navigationBarHidden(true)
         .onAppear {
@@ -132,6 +168,10 @@ struct ExploreView: View {
     
     // MARK: - Helpers
     
+    private var visibleMessages: [ChatMessage] {
+        Array(model.messages.filter { $0.role != .system }.suffix(2))
+    }
+
     private var buttonState: PrimaryMicButton.State {
         switch model.conversation {
         case .idle: return .idle
@@ -173,14 +213,18 @@ struct ExploreView: View {
             // Start
             model.toggleTalking()
 
-            // Auto-capture photo shortly after start, but cancel if user stops quickly or navigates away.
-            pendingPhotoCapture?.cancel()
-            pendingPhotoCapture = Task {
-                try? await Task.sleep(nanoseconds: 500_000_000) // let focus settle
-                guard !Task.isCancelled else { return }
-                guard model.mode == .explore else { return }
-                guard model.audio.isRecording else { return }
-                await model.captureAndSendPhoto()
+            // Auto-capture photo shortly after start (only when using native camera).
+            if !AppConfig.useRealtimeVideo {
+                pendingPhotoCapture?.cancel()
+                pendingPhotoCapture = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // let focus settle
+                    guard !Task.isCancelled else { return }
+                    guard model.mode == .explore else { return }
+                    guard model.audio.isRecording else { return }
+                    Task { @MainActor in
+                        await model.captureAndSendPhoto()
+                    }
+                }
             }
         }
     }
