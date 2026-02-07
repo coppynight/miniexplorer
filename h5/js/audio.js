@@ -45,6 +45,21 @@ function createWavRecorder(stream) {
   };
 }
 
+function resampleToTarget(data, sourceRate, targetRate) {
+  if (sourceRate === targetRate) return data;
+  const ratio = sourceRate / targetRate;
+  const newLength = Math.round(data.length / ratio);
+  const out = new Float32Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const srcIndex = i * ratio;
+    const i0 = Math.floor(srcIndex);
+    const i1 = Math.min(i0 + 1, data.length - 1);
+    const t = srcIndex - i0;
+    out[i] = data[i0] * (1 - t) + data[i1] * t;
+  }
+  return out;
+}
+
 function encodeWav(buffers, sampleRate) {
   const length = buffers.reduce((acc, b) => acc + b.length, 0);
   const data = new Float32Array(length);
@@ -54,7 +69,10 @@ function encodeWav(buffers, sampleRate) {
     offset += b.length;
   }
 
-  const buffer = new ArrayBuffer(44 + data.length * 2);
+  const targetRate = 16000;
+  const pcm = resampleToTarget(data, sampleRate, targetRate);
+
+  const buffer = new ArrayBuffer(44 + pcm.length * 2);
   const view = new DataView(buffer);
 
   function writeString(o, s) {
@@ -62,22 +80,22 @@ function encodeWav(buffers, sampleRate) {
   }
 
   writeString(0, 'RIFF');
-  view.setUint32(4, 36 + data.length * 2, true);
+  view.setUint32(4, 36 + pcm.length * 2, true);
   writeString(8, 'WAVE');
   writeString(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
+  view.setUint32(24, targetRate, true);
+  view.setUint32(28, targetRate * 2, true);
   view.setUint16(32, 2, true);
   view.setUint16(34, 16, true);
   writeString(36, 'data');
-  view.setUint32(40, data.length * 2, true);
+  view.setUint32(40, pcm.length * 2, true);
 
   let idx = 44;
-  for (let i = 0; i < data.length; i++) {
-    let s = Math.max(-1, Math.min(1, data[i]));
+  for (let i = 0; i < pcm.length; i++) {
+    let s = Math.max(-1, Math.min(1, pcm[i]));
     view.setInt16(idx, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     idx += 2;
   }
