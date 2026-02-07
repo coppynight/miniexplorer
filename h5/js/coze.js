@@ -55,10 +55,55 @@ function buildObjectStringItems({ imageFileId, audioFileId, promptText }) {
   return JSON.stringify(items);
 }
 
+async function parseStreamForChatIds(resp) {
+  const reader = resp.body?.getReader();
+  if (!reader) throw new Error('chat_create_stream_no_reader');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let chatId = null;
+  let conversationId = null;
+  let lastJson = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data:')) continue;
+      const data = trimmed.replace(/^data:\s*/, '');
+      if (data === '[DONE]') break;
+      try {
+        const json = JSON.parse(data);
+        lastJson = json;
+        if (json?.code != null && json.code !== 0) {
+          throw new Error(`chat_create_code_${json.code}: ${json.msg || data}`);
+        }
+        const cid = json?.data?.id || json?.data?.chat_id;
+        const conv = json?.data?.conversation_id;
+        if (cid) chatId = cid;
+        if (conv) conversationId = conv;
+      } catch (e) {
+        // ignore non-JSON chunks
+      }
+    }
+  }
+
+  if (!resp.ok) throw new Error(`chat_create_http_${resp.status}`);
+  if (!chatId || !conversationId) throw new Error(`chat_create_missing_ids: ${JSON.stringify(lastJson)}`);
+  return { chatId, conversationId, json: lastJson };
+}
+
 async function createChat({ imageFileId, audioFileId, promptText }) {
   const { baseUrl, token, botId } = requireConfig();
 
   const content = buildObjectStringItems({ imageFileId, audioFileId, promptText });
+  const useStream = Boolean(audioFileId);
 
   const payload = {
     bot_id: botId,
@@ -70,8 +115,8 @@ async function createChat({ imageFileId, audioFileId, promptText }) {
         content
       }
     ],
-    auto_save_history: false,
-    stream: false
+    auto_save_history: true,
+    stream: useStream
   };
 
   const resp = await fetch(`${baseUrl}/v3/chat`, {
@@ -82,6 +127,10 @@ async function createChat({ imageFileId, audioFileId, promptText }) {
     },
     body: JSON.stringify(payload)
   });
+
+  if (useStream) {
+    return await parseStreamForChatIds(resp);
+  }
 
   const text = await resp.text();
   let json;
