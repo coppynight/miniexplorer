@@ -46,11 +46,23 @@ async function uploadFile({ blob, filename, contentType }) {
   return { fileId, json };
 }
 
-function buildObjectStringItems({ imageFileId, audioFileId, promptText }) {
+function inferAudioFileTypeFromMime(mime) {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('ogg')) return 'ogg_opus';
+  if (m.includes('wav')) return 'wav';
+  return null;
+}
+
+function buildObjectStringItems({ imageFileId, audioFileId, audioMime, promptText }) {
   const items = [];
   if (imageFileId) items.push({ type: 'image', file_id: imageFileId });
   // v1.2 assumption; may need adjust based on Coze error messages
-  if (audioFileId) items.push({ type: 'audio', file_id: audioFileId });
+  if (audioFileId) {
+    const audio_file_type = inferAudioFileTypeFromMime(audioMime);
+    const audioItem = { type: 'audio', file_id: audioFileId };
+    if (audio_file_type) audioItem.audio_file_type = audio_file_type;
+    items.push(audioItem);
+  }
   if (promptText) items.push({ type: 'text', text: String(promptText) });
   return JSON.stringify(items);
 }
@@ -99,10 +111,10 @@ async function parseStreamForChatIds(resp) {
   return { chatId, conversationId, json: lastJson };
 }
 
-async function createChat({ imageFileId, audioFileId, promptText }) {
+async function createChat({ imageFileId, audioFileId, audioMime, promptText }) {
   const { baseUrl, token, botId } = requireConfig();
 
-  const content = buildObjectStringItems({ imageFileId, audioFileId, promptText });
+  const content = buildObjectStringItems({ imageFileId, audioFileId, audioMime, promptText });
   const useStream = Boolean(audioFileId);
 
   const payload = {
@@ -236,13 +248,7 @@ export function initCoze() {
         : null;
 
       const audioType = audioBlob?.type || 'application/octet-stream';
-      const audioExt = audioType.includes('mp4')
-        ? 'm4a'
-        : (audioType.includes('aac')
-          ? 'aac'
-          : (audioType.includes('webm')
-            ? 'webm'
-            : 'dat'));
+      const audioExt = audioType.includes('ogg') ? 'ogg' : (audioType.includes('wav') ? 'wav' : 'dat');
       const audioUp = audioBlob
         ? await uploadFile({ blob: audioBlob, filename: `audio.${audioExt}`, contentType: audioType })
         : null;
@@ -250,6 +256,7 @@ export function initCoze() {
       const { chatId, conversationId } = await createChat({
         imageFileId: imageUp?.fileId,
         audioFileId: audioUp?.fileId,
+        audioMime: audioType,
         promptText
       });
 

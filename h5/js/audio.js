@@ -6,14 +6,9 @@ let lastAudioBlob = null;
 function pickMimeType() {
   if (!window.MediaRecorder) return null;
   const candidates = [
-    'audio/mp4',
-    'audio/aac',
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    ''
+    'audio/ogg;codecs=opus'
   ];
   for (const type of candidates) {
-    if (!type) return '';
     try {
       if (MediaRecorder.isTypeSupported(type)) return type;
     } catch (_) {}
@@ -43,7 +38,8 @@ export function initAudio() {
       lastAudioBlob = null;
 
       const mimeType = pickMimeType();
-      const options = mimeType ? { mimeType } : undefined;
+      if (!mimeType) throw new Error('audio_format_not_supported');
+      const options = { mimeType };
       mediaRecorder = new MediaRecorder(audioStream, options);
 
       mediaRecorder.ondataavailable = (e) => {
@@ -73,7 +69,7 @@ export function initAudio() {
       mediaRecorder.stop();
       await waitStop;
 
-      const type = mediaRecorder.mimeType || (chunks[0] && chunks[0].type) || 'audio/webm';
+      const type = mediaRecorder.mimeType || (chunks[0] && chunks[0].type) || 'audio/ogg;codecs=opus';
       const blob = new Blob(chunks, { type });
       lastAudioBlob = blob;
       return blob;
