@@ -222,12 +222,19 @@ async function fetchAssistantReply({ conversationId, chatId }) {
   const assistants = messages.filter((m) => m?.role === 'assistant');
   if (!assistants.length) return { text: null, json };
 
-  for (let i = assistants.length - 1; i >= 0; i--) {
-    const assistant = assistants[i];
+  // Prefer explicit answer
+  const answer = assistants.find((m) => m?.type === 'answer' && m?.content);
+  if (answer) return { text: answer.content, json };
+
+  for (const assistant of assistants) {
+    if (assistant?.type === 'verbose') {
+      const content = String(assistant.content || '');
+      if (content.includes('time_capsule_recall') || content.includes('generate_answer_finish')) continue;
+    }
     if (assistant.content_type === 'object_string') {
       const t = extractTextFromObjectString(assistant.content);
       if (t) return { text: t, json };
-      continue; // skip non-text object_string (e.g. time_capsule_recall)
+      continue;
     }
     if (assistant.content) return { text: assistant.content, json };
   }
