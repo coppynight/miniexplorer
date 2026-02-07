@@ -1,8 +1,8 @@
-import { initCamera } from './camera.js';
-import { initAudio } from './audio.js';
-import { initCoze } from './coze.js?v=handsfree-1';
-import { createUI } from './ui.js';
-import { ConversationEngine } from './engine.js';
+import { initCamera } from './camera.js?v=handsfree-3';
+import { initAudio } from './audio.js?v=handsfree-3';
+import { initCoze } from './coze.js?v=handsfree-3';
+import { createUI } from './ui.js?v=handsfree-3';
+import { ConversationEngine } from './engine.js?v=handsfree-3';
 
 class Router {
   constructor(app) {
