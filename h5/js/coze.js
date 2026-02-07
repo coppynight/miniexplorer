@@ -101,6 +101,7 @@ async function parseStreamForChatIds(resp) {
         if (cid) chatId = cid;
         if (conv) conversationId = conv;
       } catch (e) {
+        if (String(e?.message || '').startsWith('chat_create_code_')) throw e;
         // ignore non-JSON chunks
       }
     }
