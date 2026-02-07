@@ -141,6 +141,11 @@ async function createChat({ imageFileId, audioFileId, audioMime, promptText }) {
   });
 
   if (useStream) {
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok || ct.includes('application/json')) {
+      const text = await resp.text();
+      throw new Error(`chat_create_http_${resp.status}: ${text}`);
+    }
     return await parseStreamForChatIds(resp);
   }
 
