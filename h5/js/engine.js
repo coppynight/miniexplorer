@@ -22,6 +22,8 @@ export class ConversationEngine {
     this.silenceMs = 800;
     this.lastVoiceAt = 0;
     this.isRecording = false;
+    this.recordStartAt = 0;
+    this.maxSegmentMs = 6000;
 
     this.pendingImageBlob = null;
   }
@@ -59,10 +61,12 @@ export class ConversationEngine {
     }
 
     // 3) Unlock TTS best-effort (may help iOS)
+    try { window.speechSynthesis?.getVoices?.(); } catch (_) {}
     try { speak(''); } catch (_) {}
 
     // 4) Setup VAD
     await this._setupVAD();
+    try { await this.audioContext?.resume?.(); } catch (_) {}
 
     this.ui.showPermissionOverlay(false);
     this.ui.setState('LISTENING', this.mode);
@@ -125,6 +129,9 @@ export class ConversationEngine {
       if (this.isRecording) {
         if (now - this.lastVoiceAt > this.silenceMs) {
           await this._endSegmentAndSend();
+        } else if (this.recordStartAt && now - this.recordStartAt > this.maxSegmentMs) {
+          // safety: force stop after max duration to avoid stuck recording
+          await this._endSegmentAndSend();
         }
       }
 
@@ -136,6 +143,7 @@ export class ConversationEngine {
 
   async _beginSegment() {
     this.isRecording = true;
+    this.recordStartAt = performance.now();
     this.ui.setState('RECORDING', this.mode);
 
     // Capture a frame if camera is active (optional)
@@ -152,6 +160,7 @@ export class ConversationEngine {
 
   async _endSegmentAndSend() {
     this.isRecording = false;
+    this.recordStartAt = 0;
     this.ui.setState('THINKING', this.mode);
 
     const audioBlob = await this.app.audio.stop();
