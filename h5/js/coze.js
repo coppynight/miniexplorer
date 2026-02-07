@@ -235,6 +235,17 @@ async function fetchAssistantReply({ conversationId, chatId }) {
   return { text: null, json };
 }
 
+async function fetchAssistantReplyWithRetry({ conversationId, chatId, tries = 8, intervalMs = 300 }) {
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    const res = await fetchAssistantReply({ conversationId, chatId });
+    last = res;
+    if (res?.text) return res;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return last || { text: null };
+}
+
 export function initCoze() {
   return {
     getConfig,
@@ -275,9 +286,9 @@ export function initCoze() {
         throw new Error(`chat_status_${st.status}`);
       }
 
-      const reply = await fetchAssistantReply({ conversationId, chatId });
+      const reply = await fetchAssistantReplyWithRetry({ conversationId, chatId });
       return {
-        replyText: reply.text,
+        replyText: reply?.text || null,
         conversationId,
         chatId,
         debug: { cfg, imageUp, audioUp, status: st, reply }
