@@ -132,6 +132,7 @@ async function createChat({ imageFileId, audioFileId, audioMime, promptText }) {
     stream: useStream
   };
 
+  if (window.__COZE_DEBUG) console.log('coze.createChat payload', payload);
   const resp = await fetch(`${baseUrl}/v3/chat`, {
     method: 'POST',
     headers: {
