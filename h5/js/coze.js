@@ -186,10 +186,15 @@ async function pollChatStatus({ conversationId, chatId, tries = 25, intervalMs =
 
 function extractTextFromObjectString(content) {
   try {
-    const arr = JSON.parse(content);
-    if (Array.isArray(arr)) {
-      const t = arr.find((x) => x && x.type === 'text' && typeof x.text === 'string');
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      const t = parsed.find((x) => x && x.type === 'text' && typeof x.text === 'string');
       return t?.text || null;
+    }
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.msg_type === 'time_capsule_recall') return null;
+      if (typeof parsed.text === 'string') return parsed.text;
+      if (typeof parsed.wraped_text === 'string') return parsed.wraped_text;
     }
   } catch (_) {}
   return null;
@@ -214,15 +219,20 @@ async function fetchAssistantReply({ conversationId, chatId }) {
   const messages = json?.data;
   if (!Array.isArray(messages)) return { text: null, json };
 
-  const assistant = messages.find((m) => m?.role === 'assistant');
-  if (!assistant) return { text: null, json };
+  const assistants = messages.filter((m) => m?.role === 'assistant');
+  if (!assistants.length) return { text: null, json };
 
-  if (assistant.content_type === 'object_string') {
-    const t = extractTextFromObjectString(assistant.content);
-    return { text: t || assistant.content, json };
+  for (let i = assistants.length - 1; i >= 0; i--) {
+    const assistant = assistants[i];
+    if (assistant.content_type === 'object_string') {
+      const t = extractTextFromObjectString(assistant.content);
+      if (t) return { text: t, json };
+      continue; // skip non-text object_string (e.g. time_capsule_recall)
+    }
+    if (assistant.content) return { text: assistant.content, json };
   }
 
-  return { text: assistant.content, json };
+  return { text: null, json };
 }
 
 export function initCoze() {
