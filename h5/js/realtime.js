@@ -152,10 +152,26 @@ export function initRealtime({ ui, getConfig } = {}) {
   };
 
   const ensureClient = ({ videoRenderDomId } = {}) => {
-    // renderDom 和 mode 强绑定；简单起见：若 renderDom 变了，重建 client。
+    // renderDom 和 mode 强绑定；但还要考虑 baseUrl/accessToken/botId 等配置变化。
+    // 否则用户更新 localStorage 后重试，会继续复用旧 client（旧鉴权），导致一直连不上。
+
+    const cfg = resolveConfig() || {};
     const desiredDom = videoRenderDomId || '';
+
+    const desiredKey = JSON.stringify({
+      baseUrl: cfg.baseUrl || DEFAULT_BASE,
+      token: cfg.token || '',
+      botId: cfg.botId || '',
+      connectorId: cfg.connectorId || '1024',
+      roomMode: cfg.roomMode || 'default',
+      debug: !!cfg.debug,
+      renderDom: desiredDom,
+    });
+
     const currentDom = client?._clientConfig?.videoConfig?.renderDom || client?._config?.videoConfig?.renderDom || '';
-    if (client && currentDom === desiredDom) return client;
+    const currentKey = client?._miniExplorerConfigKey || '';
+
+    if (client && currentDom === desiredDom && currentKey === desiredKey) return client;
 
     // reset
     try {
@@ -166,6 +182,8 @@ export function initRealtime({ ui, getConfig } = {}) {
     videoEnabled = false;
 
     client = new RealtimeClient(buildClientConfig({ videoRenderDomId }));
+    // attach a stable key so we can detect config changes on next retry
+    client._miniExplorerConfigKey = desiredKey;
     bindEvents(client);
     return client;
   };
