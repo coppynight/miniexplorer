@@ -46,19 +46,77 @@ async function uploadFile({ blob, filename, contentType }) {
   return { fileId, json };
 }
 
-function buildObjectStringItems({ imageFileId, audioFileId, promptText }) {
+function inferAudioFileTypeFromMime(mime) {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('ogg')) return 'ogg_opus';
+  if (m.includes('wav')) return 'wav';
+  return null;
+}
+
+function buildObjectStringItems({ imageFileId, audioFileId, audioMime, promptText }) {
   const items = [];
   if (imageFileId) items.push({ type: 'image', file_id: imageFileId });
   // v1.2 assumption; may need adjust based on Coze error messages
-  if (audioFileId) items.push({ type: 'audio', file_id: audioFileId });
+  if (audioFileId) {
+    const audio_file_type = inferAudioFileTypeFromMime(audioMime);
+    const audioItem = { type: 'audio', file_id: audioFileId };
+    if (audio_file_type) audioItem.audio_file_type = audio_file_type;
+    items.push(audioItem);
+  }
   if (promptText) items.push({ type: 'text', text: String(promptText) });
   return JSON.stringify(items);
 }
 
-async function createChat({ imageFileId, audioFileId, promptText }) {
+async function parseStreamForChatIds(resp) {
+  const reader = resp.body?.getReader();
+  if (!reader) throw new Error('chat_create_stream_no_reader');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let chatId = null;
+  let conversationId = null;
+  let lastJson = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data:')) continue;
+      const data = trimmed.replace(/^data:\s*/, '');
+      if (data === '[DONE]') break;
+      try {
+        const json = JSON.parse(data);
+        lastJson = json;
+        if (json?.code != null && json.code !== 0) {
+          throw new Error(`chat_create_code_${json.code}: ${json.msg || data}`);
+        }
+        const cid = json?.data?.id || json?.data?.chat_id;
+        const conv = json?.data?.conversation_id;
+        if (cid) chatId = cid;
+        if (conv) conversationId = conv;
+      } catch (e) {
+        if (String(e?.message || '').startsWith('chat_create_code_')) throw e;
+        // ignore non-JSON chunks
+      }
+    }
+  }
+
+  if (!resp.ok) throw new Error(`chat_create_http_${resp.status}`);
+  if (!chatId || !conversationId) throw new Error(`chat_create_missing_ids: ${JSON.stringify(lastJson)}`);
+  return { chatId, conversationId, json: lastJson };
+}
+
+async function createChat({ imageFileId, audioFileId, audioMime, promptText }) {
   const { baseUrl, token, botId } = requireConfig();
 
-  const content = buildObjectStringItems({ imageFileId, audioFileId, promptText });
+  const content = buildObjectStringItems({ imageFileId, audioFileId, audioMime, promptText });
+  const useStream = Boolean(audioFileId);
 
   const payload = {
     bot_id: botId,
@@ -70,10 +128,11 @@ async function createChat({ imageFileId, audioFileId, promptText }) {
         content
       }
     ],
-    auto_save_history: false,
-    stream: false
+    auto_save_history: true,
+    stream: useStream
   };
 
+  if (window.__COZE_DEBUG) console.log('coze.createChat payload', payload);
   const resp = await fetch(`${baseUrl}/v3/chat`, {
     method: 'POST',
     headers: {
@@ -82,6 +141,15 @@ async function createChat({ imageFileId, audioFileId, promptText }) {
     },
     body: JSON.stringify(payload)
   });
+
+  if (useStream) {
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok || ct.includes('application/json')) {
+      const text = await resp.text();
+      throw new Error(`chat_create_http_${resp.status}: ${text}`);
+    }
+    return await parseStreamForChatIds(resp);
+  }
 
   const text = await resp.text();
   let json;
@@ -125,10 +193,15 @@ async function pollChatStatus({ conversationId, chatId, tries = 25, intervalMs =
 
 function extractTextFromObjectString(content) {
   try {
-    const arr = JSON.parse(content);
-    if (Array.isArray(arr)) {
-      const t = arr.find((x) => x && x.type === 'text' && typeof x.text === 'string');
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      const t = parsed.find((x) => x && x.type === 'text' && typeof x.text === 'string');
       return t?.text || null;
+    }
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.msg_type === 'time_capsule_recall') return null;
+      if (typeof parsed.text === 'string') return parsed.text;
+      if (typeof parsed.wraped_text === 'string') return parsed.wraped_text;
     }
   } catch (_) {}
   return null;
@@ -153,15 +226,38 @@ async function fetchAssistantReply({ conversationId, chatId }) {
   const messages = json?.data;
   if (!Array.isArray(messages)) return { text: null, json };
 
-  const assistant = messages.find((m) => m?.role === 'assistant');
-  if (!assistant) return { text: null, json };
+  const assistants = messages.filter((m) => m?.role === 'assistant');
+  if (!assistants.length) return { text: null, json };
 
-  if (assistant.content_type === 'object_string') {
-    const t = extractTextFromObjectString(assistant.content);
-    return { text: t || assistant.content, json };
+  // Prefer explicit answer
+  const answer = assistants.find((m) => m?.type === 'answer' && m?.content);
+  if (answer) return { text: answer.content, json };
+
+  for (const assistant of assistants) {
+    if (assistant?.type === 'verbose') {
+      const content = String(assistant.content || '');
+      if (content.includes('time_capsule_recall') || content.includes('generate_answer_finish')) continue;
+    }
+    if (assistant.content_type === 'object_string') {
+      const t = extractTextFromObjectString(assistant.content);
+      if (t) return { text: t, json };
+      continue;
+    }
+    if (assistant.content) return { text: assistant.content, json };
   }
 
-  return { text: assistant.content, json };
+  return { text: null, json };
+}
+
+async function fetchAssistantReplyWithRetry({ conversationId, chatId, tries = 8, intervalMs = 300 }) {
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    const res = await fetchAssistantReply({ conversationId, chatId });
+    last = res;
+    if (res?.text) return res;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return last || { text: null };
 }
 
 export function initCoze() {
@@ -187,13 +283,7 @@ export function initCoze() {
         : null;
 
       const audioType = audioBlob?.type || 'application/octet-stream';
-      const audioExt = audioType.includes('mp4')
-        ? 'm4a'
-        : (audioType.includes('aac')
-          ? 'aac'
-          : (audioType.includes('webm')
-            ? 'webm'
-            : 'dat'));
+      const audioExt = audioType.includes('ogg') ? 'ogg' : (audioType.includes('wav') ? 'wav' : 'dat');
       const audioUp = audioBlob
         ? await uploadFile({ blob: audioBlob, filename: `audio.${audioExt}`, contentType: audioType })
         : null;
@@ -201,6 +291,7 @@ export function initCoze() {
       const { chatId, conversationId } = await createChat({
         imageFileId: imageUp?.fileId,
         audioFileId: audioUp?.fileId,
+        audioMime: audioType,
         promptText
       });
 
@@ -209,9 +300,9 @@ export function initCoze() {
         throw new Error(`chat_status_${st.status}`);
       }
 
-      const reply = await fetchAssistantReply({ conversationId, chatId });
+      const reply = await fetchAssistantReplyWithRetry({ conversationId, chatId });
       return {
-        replyText: reply.text,
+        replyText: reply?.text || null,
         conversationId,
         chatId,
         debug: { cfg, imageUp, audioUp, status: st, reply }

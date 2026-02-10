@@ -1,8 +1,6 @@
-import { initCamera } from './camera.js';
-import { initAudio } from './audio.js';
-import { initCoze } from './coze.js?v=handsfree-1';
-import { createUI } from './ui.js';
-import { ConversationEngine } from './engine.js';
+import { initRealtime } from './realtime.js?v=handsfree-3';
+import { createUI } from './ui.js?v=handsfree-3';
+import { ConversationEngine } from './engine.js?v=handsfree-3';
 
 class Router {
   constructor(app) {
@@ -39,12 +37,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     // Services
-    const camera = await initCamera(); // factory
-    const audio = initAudio();
-    const coze = initCoze();
+    const ui = createUI();
+    const realtime = initRealtime({ ui });
 
-    const app = { camera, audio, coze };
-    app.ui = createUI();
+    const app = { realtime, ui };
     app.engine = new ConversationEngine({ app, ui: app.ui });
     app.router = new Router(app);
 

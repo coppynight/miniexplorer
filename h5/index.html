@@ -25,6 +25,7 @@
             
             <header class="home-header">
                 <h1 class="app-title">小探探 MiniExplorer</h1>
+                <div class="home-realtime" id="realtime-status">Realtime: 未连接</div>
             </header>
 
             <div class="home-avatar">
@@ -89,6 +90,7 @@
                         <span class="avatar-face" id="explore-ai-face">😊</span>
                     </div>
                     <div class="ai-indicator-text" id="explore-status">对准想看的东西</div>
+                    <div class="state-badge" id="explore-state">Ready</div>
                 </div>
             </div>
 
@@ -139,6 +141,7 @@
                         <div class="avatar-face" id="companion-face">😊</div>
                     </div>
                     <div class="companion-status" id="companion-status">想聊什么？</div>
+                    <div class="state-badge" id="companion-state">Ready</div>
                 </div>
             </div>
 
@@ -164,6 +167,19 @@
     <!-- Hidden canvas for capture -->
     <canvas id="photo-canvas" style="display: none;"></canvas>
 
-    <script type="module" src="js/main.js?v=handsfree-1"></script>
+    <!-- Debug: Events Panel -->
+    <button id="event-fab" class="event-fab" title="Toggle Events">Events</button>
+    <div id="event-panel" class="event-panel" style="display:none;">
+      <div class="event-panel-header">
+        <div class="event-panel-title">Realtime Events</div>
+        <div class="event-panel-actions">
+          <button id="event-clear" class="event-btn">Clear</button>
+          <button id="event-close" class="event-btn">Close</button>
+        </div>
+      </div>
+      <div id="event-list" class="event-panel-list"></div>
+    </div>
+
+    <script type="module" src="js/main.js?v=handsfree-3"></script>
 </body>
 </html>

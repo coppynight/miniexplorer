@@ -9,5 +9,8 @@ xcuserdata/
 # Clawdbot / local artifacts
 outputs/
 
+# Local editor/tooling artifacts
+.codebuddy/
+
 # Node
 node_modules/

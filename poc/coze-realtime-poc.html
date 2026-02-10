@@ -173,7 +173,15 @@
       <button class="btn btn-primary" id="btnConnect" onclick="testConnect()">连接</button>
       <button class="btn btn-danger" id="btnDisconnect" onclick="testDisconnect()" disabled>断开</button>
       <button class="btn btn-success" id="btnMic" onclick="toggleMic()" disabled>开启麦克风</button>
+      <button class="btn btn-success" id="btnVideo" onclick="toggleVideo()" disabled>开启视频</button>
     </div>
+  </div>
+
+  <!-- 视频预览 -->
+  <div class="section">
+    <h2>2.1 视频预览</h2>
+    <p style="margin-bottom: 10px; color: #666;">如开启视频，画面将显示在下方（renderDom: local-player）</p>
+    <div id="local-player" style="width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px;"></div>
   </div>
 
   <!-- 验证清单 -->
@@ -187,6 +195,10 @@
       <li>
         <span class="icon pending" id="check2">-</span>
         <span>可获取麦克风权限</span>
+      </li>
+      <li>
+        <span class="icon pending" id="check2v">-</span>
+        <span>可获取摄像头权限</span>
       </li>
       <li>
         <span class="icon pending" id="check3">-</span>
@@ -224,6 +236,7 @@
     let RealtimeClient, EventNames, RealtimeUtils;
     let client = null;
     let micEnabled = false;
+    let videoEnabled = false;
 
     // 日志函数
     function log(message, type = 'info') {
@@ -288,10 +301,10 @@
         if (!loaded) return;
       }
 
-      // 检查麦克风权限
-      log('检查麦克风权限...');
+      // 检查麦克风/摄像头权限
+      log('检查麦克风/摄像头权限...');
       try {
-        const permission = await RealtimeUtils.checkDevicePermission();
+        const permission = await RealtimeUtils.checkDevicePermission(true);
         if (permission.audio) {
           log('麦克风权限已获取', 'success');
           updateCheck('check2', 'pass');
@@ -300,9 +313,18 @@
           updateCheck('check2', 'fail');
           return;
         }
+        if (permission.video) {
+          log('摄像头权限已获取', 'success');
+          updateCheck('check2v', 'pass');
+        } else {
+          log('摄像头权限被拒绝', 'error');
+          updateCheck('check2v', 'fail');
+          return;
+        }
       } catch (e) {
         log(`权限检查失败: ${e.message}`, 'error');
         updateCheck('check2', 'fail');
+        updateCheck('check2v', 'fail');
         return;
       }
 
@@ -311,6 +333,13 @@
       updateStatus('connecting');
 
       try {
+        const uidKey = 'coze_realtime_uid';
+        let userId = localStorage.getItem(uidKey);
+        if (!userId) {
+          userId = (globalThis.crypto?.randomUUID?.() || `u_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+          localStorage.setItem(uidKey, userId);
+        }
+
         client = new RealtimeClient({
           baseURL,
           accessToken,
@@ -319,16 +348,38 @@
           debug: true,
           allowPersonalAccessTokenInBrowser: true,
           audioMutedDefault: true,
+
+          // 关键：realtime-console 示例里会显式带上这些字段（可能影响“视频通话/抽帧”链路）
+          connectorId: '1024',
+          userId,
+          roomMode: 'default',
+
+          videoConfig: {
+            renderDom: 'local-player',
+            videoOnDefault: false
+          }
         });
 
+        // expose for debugging
+        window.__rt = { client, EventNames };
+        try {
+          const videoRelated = Object.entries(EventNames || {}).filter(([k,v]) => String(k).includes('VIDEO') || String(v).toLowerCase().includes('video'));
+          log(`EventNames(video): ${videoRelated.map(([k,v])=>`${k}=${v}`).join(', ') || '(none)'}`, 'info');
+        } catch (e) {}
+
         // 监听事件
-        client.on(EventNames.CONNECTED, (e) => {
+        client.on(EventNames.CONNECTED, async (e) => {
           log('连接成功!', 'success');
           updateCheck('check3', 'pass');
           updateStatus('connected');
           document.getElementById('btnConnect').disabled = true;
           document.getElementById('btnDisconnect').disabled = false;
           document.getElementById('btnMic').disabled = false;
+          document.getElementById('btnVideo').disabled = false;
+
+          // 默认不自动开启视频（避免占用/重复 capture 影响音频测试）
+          videoEnabled = false;
+          document.getElementById('btnVideo').textContent = '开启视频';
         });
 
         client.on(EventNames.ERROR, (e) => {
@@ -336,17 +387,48 @@
         });
 
         client.on(EventNames.ALL_SERVER, (e) => {
-          log(`服务器事件: ${e.event_type || e.type || 'unknown'}`, 'event');
+          // 注意：该 SDK 事件在某些版本里会直接给一个 string（事件名）
+          const t = (typeof e === 'string')
+            ? e
+            : (e?.event_type || e?.type || e?.event?.type || e?.data?.type || e?.data?.event_type || 'unknown');
 
-          // 检查是否收到 AI 响应
-          if (e.event_type === 'conversation.message.delta' ||
-              e.type === 'response.audio.delta') {
+          log(`服务器事件: ${t}`, 'event');
+
+          // 如果识别不出类型，打印一个“缩略版对象”方便排查
+          if (t === 'unknown') {
+            try {
+              const preview = {
+                keys: Object.keys(e || {}),
+                dataKeys: Object.keys((e && e.data) || {}),
+                raw: (typeof e === 'string' ? e : JSON.stringify(e)).slice(0, 400)
+              };
+              log(`事件预览: ${JSON.stringify(preview)}`, 'info');
+            } catch {}
+          }
+
+          // 对于 string 事件名：用前缀判断
+          if (typeof t === 'string') {
+            if (t.includes('audio.user')) updateCheck('check4', 'pass');
+            if (t.includes('audio.agent') || t.includes('conversation.message') || t.includes('response.audio')) updateCheck('check5', 'pass');
+          }
+
+          // 对于 object payload（若未来有）：尝试解析文本/音频 delta
+          const isTextDelta = (t === 'conversation.message.delta' || t === 'conversation.message.completed');
+          const isAudioDelta = (t === 'response.audio.delta' || t === 'response.audio.completed');
+
+          if (isTextDelta) {
+            const delta = e?.data?.delta || e?.delta || '';
+            const text = (typeof delta === 'string' ? delta : '') || (e?.data?.content || '');
+            if (text) log(`AI 文本: ${String(text).slice(0, 200)}`, 'success');
+            updateCheck('check5', 'pass');
+          }
+          if (isAudioDelta) {
             updateCheck('check5', 'pass');
           }
         });
 
         client.on(EventNames.AUDIO_UNMUTED, () => {
-          log('麦克风已开启', 'success');
+          log('麦克风已开启（AUDIO_UNMUTED）', 'success');
           updateCheck('check4', 'pass');
         });
 
@@ -372,10 +454,13 @@
         document.getElementById('btnConnect').disabled = false;
         document.getElementById('btnDisconnect').disabled = true;
         document.getElementById('btnMic').disabled = true;
+        document.getElementById('btnVideo').disabled = true;
+        document.getElementById('btnVideo').textContent = '开启视频';
+        videoEnabled = false;
         log('已断开', 'info');
 
         // 检查结果
-        const checks = ['check1', 'check2', 'check3', 'check4', 'check5'];
+        const checks = ['check1', 'check2', 'check2v', 'check3', 'check4', 'check5'];
         const passed = checks.filter(id =>
           document.getElementById(id).classList.contains('pass')
         ).length;
@@ -397,6 +482,20 @@
       await client.setAudioEnable(micEnabled);
       document.getElementById('btnMic').textContent = micEnabled ? '关闭麦克风' : '开启麦克风';
       log(micEnabled ? '麦克风已开启，请说话...' : '麦克风已关闭', 'info');
+    };
+
+    // 切换视频
+    window.toggleVideo = async function() {
+      if (!client) return;
+      videoEnabled = !videoEnabled;
+      try {
+        log(`setVideoEnable(${videoEnabled})...`, 'info');
+        await client.setVideoEnable(videoEnabled);
+        document.getElementById('btnVideo').textContent = videoEnabled ? '关闭视频' : '开启视频';
+        log(videoEnabled ? '视频已开启' : '视频已关闭', 'info');
+      } catch (e) {
+        log(`视频切换失败: ${e.message || e}`, 'error');
+      }
     };
 
     // 显示结论

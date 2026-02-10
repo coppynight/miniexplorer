@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>V0 Realtime Smoke</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; }
+    label { display:block; margin-top: 12px; font-size: 14px; color:#444; }
+    input, select { width: 100%; padding: 8px 10px; font-size: 14px; margin-top: 6px; }
+    button { margin-top: 14px; padding: 10px 14px; font-size: 14px; }
+    #log { margin-top: 16px; padding: 12px; background:#111827; color:#e5e7eb; height: 320px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; border-radius: 8px; }
+    .ok { color:#86efac; }
+    .err { color:#fca5a5; }
+    .evt { color:#fbbf24; }
+  </style>
+</head>
+<body>
+  <h2>V0 Realtime API Smoke Test</h2>
+  <label>API Base URL
+    <select id="baseUrl">
+      <option value="https://api.coze.cn">https://api.coze.cn</option>
+      <option value="https://api.coze.com">https://api.coze.com</option>
+    </select>
+  </label>
+  <label>Access Token (PAT)
+    <input id="token" type="password" placeholder="pat_xxxxx" />
+  </label>
+  <label>Bot ID
+    <input id="botId" type="text" value="7598529675404886059" />
+  </label>
+  <button id="btnConnect">Connect</button>
+  <button id="btnDisconnect" disabled>Disconnect</button>
+
+  <div id="log"></div>
+
+  <script type="module">
+    let RealtimeClient, EventNames;
+    let client = null;
+
+    const logEl = document.getElementById('log');
+    const log = (msg, cls='') => {
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    async function ensureSDK() {
+      if (RealtimeClient) return;
+      log('Loading @coze/realtime-api...');
+      const mod = await import('https://esm.sh/@coze/realtime-api@latest');
+      RealtimeClient = mod.RealtimeClient;
+      EventNames = mod.EventNames;
+      log('SDK loaded', 'ok');
+    }
+
+    document.getElementById('btnConnect').onclick = async () => {
+      try {
+        await ensureSDK();
+        const baseUrl = document.getElementById('baseUrl').value;
+        const token = document.getElementById('token').value.trim();
+        const botId = document.getElementById('botId').value.trim();
+        if (!token || !botId) {
+          log('Missing token or botId', 'err');
+          return;
+        }
+
+        client = new RealtimeClient({
+          baseURL: baseUrl,
+          accessToken: token,
+          botId,
+          allowPersonalAccessTokenInBrowser: true,
+          debug: true,
+        });
+
+        client.on(EventNames.CONNECTED, () => {
+          log('CONNECTED', 'ok');
+        });
+        client.on(EventNames.ERROR, (e) => {
+          log(`ERROR: ${JSON.stringify(e)}`, 'err');
+        });
+        client.on(EventNames.ALL_SERVER, (e) => {
+          log(`SERVER EVENT: ${e.event_type || e.type || 'unknown'}`, 'evt');
+        });
+
+        log('Connecting...');
+        await client.connect();
+        document.getElementById('btnConnect').disabled = true;
+        document.getElementById('btnDisconnect').disabled = false;
+      } catch (e) {
+        log(`Connect failed: ${e.message}`, 'err');
+      }
+    };
+
+    document.getElementById('btnDisconnect').onclick = async () => {
+      try {
+        if (client) await client.disconnect();
+        log('Disconnected');
+      } catch (e) {
+        log(`Disconnect failed: ${e.message}`, 'err');
+      } finally {
+        document.getElementById('btnConnect').disabled = false;
+        document.getElementById('btnDisconnect').disabled = true;
+      }
+    };
+  </script>
+</body>
+</html>
