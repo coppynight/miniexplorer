@@ -203,8 +203,10 @@ export function initRealtime({ ui, getConfig } = {}) {
   const resolveConfig = getConfig || defaultGetConfig;
   let client = null;
   let status = 'idle';
+  let lastError = '';
   let audioEnabled = false;
   let videoEnabled = false;
+  let cameraPermissionGranted = true;
   let autoVisionEnabled = localStorage.getItem('H5_AUTO_VISION') !== '0';
 
   let speechModeActive = false;
@@ -224,8 +226,36 @@ export function initRealtime({ ui, getConfig } = {}) {
 
   const setStatus = (next, err) => {
     status = next;
+    lastError = next === 'error' ? formatError(err) : '';
     const label = STATUS_LABELS[next] || STATUS_LABELS.idle;
     ui?.setRealtimeStatus?.(label, next, formatError(err));
+  };
+
+  const ensureConfigInteractive = () => {
+    let cfg = resolveConfig() || {};
+    const canPrompt = typeof window !== 'undefined' && typeof window.prompt === 'function';
+    if (!canPrompt) return cfg;
+
+    if (!cfg.token) {
+      const tokenInput = window.prompt(
+        '请输入 Coze PAT Token（仅保存到当前浏览器 localStorage）',
+        localStorage.getItem('COZE_TOKEN') || ''
+      );
+      if (tokenInput && tokenInput.trim()) {
+        localStorage.setItem('COZE_TOKEN', tokenInput.trim());
+      }
+      cfg = resolveConfig() || {};
+    }
+
+    if (!cfg.botId) {
+      const defaultBotId = localStorage.getItem('COZE_BOT_ID') || '7598529675404886059';
+      const botIdInput = window.prompt('请输入 Coze Bot ID', defaultBotId);
+      if (botIdInput && botIdInput.trim()) {
+        localStorage.setItem('COZE_BOT_ID', botIdInput.trim());
+      }
+      cfg = resolveConfig() || {};
+    }
+    return cfg;
   };
 
   const logLocal = (name, detail = {}) => {
@@ -793,9 +823,15 @@ export function initRealtime({ ui, getConfig } = {}) {
     get status() {
       return status;
     },
+    get lastError() {
+      return lastError;
+    },
+    get isVideoAvailable() {
+      return cameraPermissionGranted;
+    },
 
     async connect({ enableVideo = false } = {}) {
-      const cfg = resolveConfig() || {};
+      let cfg = ensureConfigInteractive();
       if (!cfg.token) {
         setStatus('error', 'missing_COZE_TOKEN (set localStorage COZE_TOKEN)');
         return false;
@@ -813,23 +849,32 @@ export function initRealtime({ ui, getConfig } = {}) {
           setStatus('error', 'mic_permission_denied');
           return false;
         }
+        let useVideo = needVideo;
         if (needVideo && !permission?.video) {
-          setStatus('error', 'camera_permission_denied');
-          return false;
+          useVideo = false;
+          cameraPermissionGranted = false;
+          autoVisionEnabled = false;
+          ui?.setCameraHint?.('相机未授权，先用语音模式。开启相机后可恢复看图回答。');
+          logLocal('camera_permission_optional_fallback', { needVideo, audio: !!permission?.audio, video: !!permission?.video });
+        } else {
+          cameraPermissionGranted = true;
+          autoVisionEnabled = localStorage.getItem('H5_AUTO_VISION') !== '0';
         }
 
         const mode = ui?.mode || 'explore';
         const videoRenderDomId = mode === 'companion' ? 'companion-preview' : 'camera-preview';
-        const currentClient = ensureClient({ videoRenderDomId: needVideo ? videoRenderDomId : '' });
+        const currentClient = ensureClient({ videoRenderDomId: useVideo ? videoRenderDomId : '' });
 
         await currentClient.connect();
         setStatus('connected');
 
-        if (needVideo) {
+        if (useVideo) {
           try {
             await currentClient.setVideoEnable(true);
             videoEnabled = true;
           } catch (_) {}
+        } else {
+          videoEnabled = false;
         }
 
         return true;
@@ -854,6 +899,7 @@ export function initRealtime({ ui, getConfig } = {}) {
 
     async enableVideo() {
       if (!client) return false;
+      if (!cameraPermissionGranted) return false;
       if (videoEnabled) return true;
       try {
         await client.setVideoEnable(true);
@@ -888,6 +934,7 @@ export function initRealtime({ ui, getConfig } = {}) {
       }
       audioEnabled = false;
       videoEnabled = false;
+      cameraPermissionGranted = true;
       resetSpeechCaptureState();
       setStatus('idle');
     },
