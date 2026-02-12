@@ -11,6 +11,7 @@ outputs/
 
 # Local editor/tooling artifacts
 .codebuddy/
+poc/coze-poc-debug-*.json
 
 # Node
 node_modules/

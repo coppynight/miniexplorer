@@ -44,6 +44,10 @@
       border-radius: 8px;
       font-size: 14px;
     }
+    input[type="checkbox"] {
+      width: auto;
+      accent-color: #4A90D9;
+    }
     input:focus, select:focus {
       outline: none;
       border-color: #4A90D9;
@@ -103,6 +107,7 @@
     .log-entry.info { color: #7ec8e3; }
     .log-entry.success { color: #98e4c9; }
     .log-entry.error { color: #ff6b6b; }
+    .log-entry.warning { color: #ffd166; }
     .log-entry.event { color: #f5a962; }
     .log-entry .time { color: #666; margin-right: 8px; }
     .result-box {
@@ -134,6 +139,35 @@
     .checklist .icon.pending { background: #eee; color: #999; }
     .checklist .icon.pass { background: #d4edda; color: #155724; }
     .checklist .icon.fail { background: #f8d7da; color: #721c24; }
+    #local-player {
+      position: relative;
+      overflow: hidden;
+    }
+    #local-player video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
+      display: block;
+    }
+    .inline-option {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #666;
+      font-size: 13px;
+      user-select: none;
+    }
+    .log-tools {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-light {
+      background: #ecf0f1;
+      color: #2c3e50;
+    }
   </style>
 </head>
 <body>
@@ -174,7 +208,12 @@
       <button class="btn btn-danger" id="btnDisconnect" onclick="testDisconnect()" disabled>断开</button>
       <button class="btn btn-success" id="btnMic" onclick="toggleMic()" disabled>开启麦克风</button>
       <button class="btn btn-success" id="btnVideo" onclick="toggleVideo()" disabled>开启视频</button>
+      <button class="btn btn-success" id="btnSnap" onclick="captureAndSendFrame()" disabled>抓拍发送</button>
     </div>
+    <label class="inline-option">
+      <input type="checkbox" id="autoVision" checked>
+      语音联动视觉（说话时 1 秒 1 帧）
+    </label>
   </div>
 
   <!-- 视频预览 -->
@@ -212,12 +251,20 @@
         <span class="icon pending" id="check5">-</span>
         <span>可接收 AI 响应</span>
       </li>
+      <li>
+        <span class="icon pending" id="check6">-</span>
+        <span>可发送图片帧并触发视觉理解</span>
+      </li>
     </ul>
   </div>
 
   <!-- 日志 -->
   <div class="section">
     <h2>4. 日志</h2>
+    <div class="log-tools">
+      <button class="btn btn-light" onclick="exportDebugLogs()">导出日志 JSON</button>
+      <button class="btn btn-light" onclick="clearDebugLogs()">清空本地日志</button>
+    </div>
     <div class="log-container" id="logContainer">
       <div class="log-entry info"><span class="time">[--:--:--]</span> 等待测试...</div>
     </div>
@@ -237,6 +284,140 @@
     let client = null;
     let micEnabled = false;
     let videoEnabled = false;
+    let fallbackPreviewStream = null;
+    let autoVisionEnabled = true;
+    let speechModeActive = false;
+    let speechFrameTimer = null;
+    let speechFrameInFlight = false;
+    let speechUploadedFrameIds = [];
+    let speechFlushTimer = null;
+    let speechBundleRetryTimer = null;
+    let speechBundleInFlight = false;
+    let assistantStartedAfterSpeech = false;
+    let assistantChatInProgress = false;
+    let currentUserSpeechText = '';
+    let latestCompletedUserSpeechText = '';
+    let speechBundleRetryCount = 0;
+    let hasDirectAudioTranscriptBinding = false;
+    let hasDirectConversationMessageBinding = false;
+    const SPEECH_FRAME_INTERVAL_MS = 1000;
+    const SPEECH_FLUSH_DELAY_MS = 320;
+    const SPEECH_MAX_FRAMES = 12;
+    const SPEECH_UPLOAD_SETTLE_TIMEOUT_MS = 1600;
+    const SPEECH_BUNDLE_MAX_RETRY = 1;
+    const SPEECH_BUNDLE_RETRY_DELAY_MS = 450;
+    const DEBUG_STORAGE_KEY = 'coze_poc_debug_session_v1';
+    const DEBUG_MAX_RECORDS = 2000;
+    const debugSession = {
+      sessionId: (globalThis.crypto?.randomUUID?.() || `sess_${Date.now()}_${Math.random().toString(16).slice(2)}`),
+      startedAt: new Date().toISOString(),
+      page: location.href,
+      userAgent: navigator.userAgent,
+      records: []
+    };
+
+    function maskToken(token) {
+      const t = String(token || '');
+      if (!t) return '';
+      if (t.length <= 10) return `${t.slice(0, 2)}***`;
+      return `${t.slice(0, 4)}***${t.slice(-4)}`;
+    }
+
+    function sanitizeValue(value, depth = 0) {
+      if (depth > 4) return '[max_depth]';
+      if (value == null) return value;
+      if (typeof value === 'string') {
+        return value.length > 500 ? `${value.slice(0, 500)}...[truncated]` : value;
+      }
+      if (typeof value !== 'object') return value;
+      if (Array.isArray(value)) {
+        const arr = value.slice(0, 20).map((v) => sanitizeValue(v, depth + 1));
+        if (value.length > 20) arr.push(`[+${value.length - 20} items truncated]`);
+        return arr;
+      }
+      const out = {};
+      const keys = Object.keys(value).slice(0, 40);
+      for (const k of keys) {
+        const lk = k.toLowerCase();
+        if (lk.includes('token') || lk.includes('authorization')) {
+          out[k] = '[redacted]';
+        } else {
+          out[k] = sanitizeValue(value[k], depth + 1);
+        }
+      }
+      if (Object.keys(value).length > 40) out.__truncated_keys = Object.keys(value).length - 40;
+      return out;
+    }
+
+    function persistDebugSession() {
+      try {
+        localStorage.setItem(DEBUG_STORAGE_KEY, JSON.stringify(debugSession));
+      } catch (_) {}
+    }
+
+    function appendDebugRecord(kind, payload = {}) {
+      const rec = {
+        ts: new Date().toISOString(),
+        kind,
+        payload: sanitizeValue(payload)
+      };
+      debugSession.records.push(rec);
+      if (debugSession.records.length > DEBUG_MAX_RECORDS) {
+        debugSession.records = debugSession.records.slice(-DEBUG_MAX_RECORDS);
+      }
+      persistDebugSession();
+    }
+
+    function exportDebugSnapshot() {
+      const baseURL = document.getElementById('baseUrl')?.value || '';
+      const botId = document.getElementById('botId')?.value?.trim() || '';
+      const token = document.getElementById('accessToken')?.value?.trim() || '';
+      return {
+        exportedAt: new Date().toISOString(),
+        session: debugSession,
+        runtime: {
+          statusText: document.getElementById('status')?.textContent || '',
+          autoVisionEnabled,
+          speechModeActive,
+          micEnabled,
+          videoEnabled
+        },
+        config: {
+          baseURL,
+          botId,
+          accessTokenMasked: maskToken(token)
+        }
+      };
+    }
+
+    window.exportDebugLogs = function() {
+      try {
+        const snapshot = exportDebugSnapshot();
+        const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `coze-poc-debug-${debugSession.sessionId}-${ts}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+        log('日志已导出到本地下载目录', 'success');
+      } catch (e) {
+        log(`导出日志失败: ${e.message || e}`, 'error');
+      }
+    };
+
+    window.clearDebugLogs = function() {
+      try {
+        localStorage.removeItem(DEBUG_STORAGE_KEY);
+        debugSession.records = [];
+        persistDebugSession();
+        log('本地日志已清空（当前会话重新开始记录）', 'warning');
+      } catch (e) {
+        log(`清空日志失败: ${e.message || e}`, 'error');
+      }
+    };
 
     // 日志函数
     function log(message, type = 'info') {
@@ -247,6 +428,7 @@
       entry.innerHTML = `<span class="time">[${time}]</span> ${message}`;
       container.appendChild(entry);
       container.scrollTop = container.scrollHeight;
+      appendDebugRecord('ui_log', { type, message, time });
     }
 
     // 更新检查项
@@ -264,11 +446,713 @@
                        status === 'connecting' ? '连接中...' : '未连接';
     }
 
+    function setConnectedButtons(connected) {
+      document.getElementById('btnConnect').disabled = connected;
+      document.getElementById('btnDisconnect').disabled = !connected;
+      document.getElementById('btnMic').disabled = !connected;
+      document.getElementById('btnVideo').disabled = !connected;
+      document.getElementById('btnSnap').disabled = !connected;
+    }
+
+    function extractRoleFromEvent(evt) {
+      return evt?.data?.role ||
+        evt?.data?.message?.role ||
+        evt?.role ||
+        evt?.message?.role ||
+        '';
+    }
+
+    function extractEventType(evt) {
+      if (typeof evt === 'string') return evt;
+      return evt?.event_type ||
+        evt?.type ||
+        evt?.event?.type ||
+        evt?.data?.type ||
+        evt?.data?.event_type ||
+        evt?.eventType ||
+        '';
+    }
+
+    function objectKeysSafe(value) {
+      return value && typeof value === 'object' ? Object.keys(value) : [];
+    }
+
+    function normalizeEventArgs(arg1, arg2, fallbackEventName = '') {
+      const eventName = typeof arg1 === 'string' ? arg1 : (extractEventType(arg1) || fallbackEventName);
+      const event = arg2 !== undefined ? arg2 : arg1;
+      return { eventName, event };
+    }
+
+    function extractTextFromObjectString(content) {
+      if (typeof content !== 'string') return '';
+      try {
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          const textItem = parsed.find((x) => x && x.type === 'text' && typeof x.text === 'string');
+          return textItem?.text || '';
+        }
+      } catch (_) {}
+      return '';
+    }
+
+    function extractTextFromEvent(evt) {
+      const candidates = [
+        evt?.data?.delta,
+        evt?.delta,
+        evt?.data?.transcript,
+        evt?.data?.text,
+        evt?.data?.message?.delta,
+        evt?.data?.message?.text,
+        evt?.data?.message?.content,
+        evt?.data?.content,
+        evt?.text
+      ];
+      for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) {
+          const fromObj = extractTextFromObjectString(c);
+          return fromObj || c.trim();
+        }
+        const v = coerceStringFromUnknown(c);
+        if (v) return v;
+      }
+      return '';
+    }
+
+    function coerceStringFromUnknown(value) {
+      if (!value) return '';
+      if (typeof value === 'string') return value.trim();
+      if (Array.isArray(value)) {
+        const parts = value.map((v) => coerceStringFromUnknown(v)).filter(Boolean);
+        return parts.join('');
+      }
+      if (typeof value === 'object') {
+        const keys = ['text', 'delta', 'transcript', 'content', 'value', 'sentence', 'utterance', 'asr_text'];
+        for (const k of keys) {
+          if (typeof value[k] === 'string' && value[k].trim()) return value[k].trim();
+        }
+      }
+      return '';
+    }
+
+    function extractUserTranscriptFromEvent(evt) {
+      const data = evt?.data || {};
+      const candidates = [
+        data.transcript,
+        data.delta,
+        data.text,
+        data.content,
+        data.result,
+        data.audio_transcript,
+        data.value,
+        data.message?.transcript,
+        data.message?.text,
+        data.message?.delta,
+        data.message?.content,
+        evt?.delta,
+        evt?.text,
+        evt?.transcript
+      ];
+      for (const c of candidates) {
+        const s = coerceStringFromUnknown(c);
+        if (s) return s;
+      }
+      return '';
+    }
+
+    function mergeTranscriptText(prev, next) {
+      const a = String(prev || '').trim();
+      const b = String(next || '').trim();
+      if (!a) return b;
+      if (!b) return a;
+      if (b.includes(a)) return b;
+      if (a.includes(b)) return a;
+      if (b.length >= a.length) return b;
+      if (a.length <= 120 && b.length <= 40) return `${a}${b}`;
+      return a;
+    }
+
+    function clearSpeechBundleRetryTimer() {
+      if (speechBundleRetryTimer) {
+        clearTimeout(speechBundleRetryTimer);
+        speechBundleRetryTimer = null;
+      }
+    }
+
+    function hasPendingSpeechVisualData() {
+      return speechUploadedFrameIds.length > 0 || speechFrameInFlight;
+    }
+
+    function getSpeechBundleDelay(reason) {
+      const r = String(reason || '').toLowerCase();
+      if (r.includes('user_text_completed') || r.includes('audio_transcript_completed')) {
+        return 80;
+      }
+      if (r.includes('speech_stopped')) {
+        return 280;
+      }
+      return SPEECH_FLUSH_DELAY_MS;
+    }
+
+    function handleUserTranscriptEvent(evt, eventType, source = 'unknown') {
+      const tn = String(eventType || '').toLowerCase();
+      const transcript = extractUserTranscriptFromEvent(evt);
+      if (!transcript) {
+        if (evt && typeof evt === 'object') {
+          appendDebugRecord('user_transcript_empty', {
+            source,
+            eventType,
+            keys: Object.keys(evt || {}),
+            dataKeys: Object.keys((evt && evt.data) || {})
+          });
+        }
+        return false;
+      }
+
+      currentUserSpeechText = mergeTranscriptText(currentUserSpeechText, transcript);
+      if (tn.includes('completed')) {
+        latestCompletedUserSpeechText = currentUserSpeechText;
+      }
+      appendDebugRecord('user_transcript', {
+        source,
+        eventType,
+        state: tn.includes('completed') ? 'completed' : 'delta',
+        textPreview: String(currentUserSpeechText).slice(0, 150)
+      });
+      if (tn.includes('completed')) {
+        log(`用户语音识别(${source}): ${String(currentUserSpeechText).slice(0, 120)}`, 'info');
+        if (!speechModeActive && autoVisionEnabled && hasPendingSpeechVisualData()) {
+          scheduleSpeechBundleSend('audio_transcript_completed');
+        }
+      }
+      return true;
+    }
+
+    function handleConversationMessageEvent(evt, eventType, source = 'unknown') {
+      const role = extractRoleFromEvent(evt);
+      const guessedRole = (!role && !assistantStartedAfterSpeech && (speechModeActive || speechUploadedFrameIds.length > 0 || speechBundleRetryCount > 0))
+        ? 'user'
+        : '';
+      const resolvedRole = role || guessedRole;
+      const text = extractTextFromEvent(evt);
+      const tn = String(eventType || '').toLowerCase();
+      const isCompleted = tn.includes('completed');
+
+      if (resolvedRole === 'user') {
+        if (!text) return false;
+        currentUserSpeechText = mergeTranscriptText(currentUserSpeechText, text);
+        if (isCompleted) {
+          latestCompletedUserSpeechText = currentUserSpeechText;
+        }
+        appendDebugRecord('user_transcript', {
+          source,
+          eventType,
+          state: isCompleted ? 'completed' : 'delta',
+          textPreview: String(currentUserSpeechText).slice(0, 150)
+        });
+        if (isCompleted) {
+          log(`用户语音识别(${source}): ${String(currentUserSpeechText).slice(0, 120)}`, 'info');
+          if (!speechModeActive && autoVisionEnabled && hasPendingSpeechVisualData()) {
+            scheduleSpeechBundleSend('user_text_completed');
+          }
+        }
+        return true;
+      }
+
+      if (text) {
+        appendDebugRecord('assistant_text', {
+          source,
+          eventType,
+          textPreview: String(text).slice(0, 200)
+        });
+        log(`AI 文本: ${String(text).slice(0, 200)}`, 'success');
+      }
+      if (tn.includes('conversation.message') || tn.includes('response.audio')) {
+        updateCheck('check5', 'pass');
+      }
+      return !!text;
+    }
+
+    function bindEventNamesByPattern({ label, patterns, handler }) {
+      if (!client || !EventNames || typeof handler !== 'function') return [];
+      const eventValues = Object.values(EventNames).filter((v) => typeof v === 'string');
+      const lowerPatterns = patterns.map((p) => String(p).toLowerCase());
+      const matched = [...new Set(eventValues.filter((name) => {
+        const ln = String(name).toLowerCase();
+        return lowerPatterns.some((p) => ln.includes(p));
+      }))];
+
+      appendDebugRecord('event_bind_scan', { label, patterns, matched });
+      if (!matched.length) {
+        log(`${label} 未匹配到可绑定事件名`, 'warning');
+        return [];
+      }
+
+      for (const eventName of matched) {
+        client.on(eventName, (arg1, arg2) => {
+          const { eventName: dispatchedEventName, event } = normalizeEventArgs(arg1, arg2, eventName);
+          appendDebugRecord('server_event_direct', {
+            label,
+            eventName,
+            dispatchedEventName,
+            eventType: dispatchedEventName || extractEventType(event) || eventName,
+            rawType: typeof event,
+            keys: objectKeysSafe(event),
+            dataKeys: objectKeysSafe((event && typeof event === 'object') ? event.data : null)
+          });
+          handler(event, dispatchedEventName || eventName, label);
+        });
+        appendDebugRecord('event_bound', { label, eventName });
+      }
+      log(`${label} 已绑定 ${matched.length} 个事件`, 'info');
+      return matched;
+    }
+
+    function stopSpeechFrameLoop() {
+      speechModeActive = false;
+      if (speechFrameTimer) {
+        clearInterval(speechFrameTimer);
+        speechFrameTimer = null;
+      }
+    }
+
+    function resetSpeechCaptureState() {
+      stopSpeechFrameLoop();
+      if (speechFlushTimer) {
+        clearTimeout(speechFlushTimer);
+        speechFlushTimer = null;
+      }
+      clearSpeechBundleRetryTimer();
+      speechUploadedFrameIds = [];
+      speechFrameInFlight = false;
+      speechBundleInFlight = false;
+      assistantStartedAfterSpeech = false;
+      assistantChatInProgress = false;
+      currentUserSpeechText = '';
+      speechBundleRetryCount = 0;
+    }
+
+    async function captureAndUploadCurrentFrame(reason = 'speech_loop') {
+      if (!videoEnabled) throw new Error('video_not_enabled');
+      const { baseURL, accessToken } = getAccessConfig();
+      const video = await waitForLocalVideo(800);
+      if (!video) throw new Error('local_video_not_ready');
+      const blob = await captureFrameBlob(video);
+      const fileId = await uploadImageToCoze({ baseURL, accessToken, imageBlob: blob });
+      return {
+        fileId,
+        width: video.videoWidth || 0,
+        height: video.videoHeight || 0,
+        size: blob.size,
+        reason
+      };
+    }
+
+    async function captureSpeechFrame() {
+      if (!speechModeActive || !videoEnabled) return;
+      if (speechFrameInFlight) return;
+      speechFrameInFlight = true;
+      try {
+        const frame = await captureAndUploadCurrentFrame('speech_loop');
+        speechUploadedFrameIds.push(frame.fileId);
+        if (speechUploadedFrameIds.length > SPEECH_MAX_FRAMES) {
+          speechUploadedFrameIds.shift();
+        }
+        appendDebugRecord('speech_frame_uploaded', {
+          reason: frame.reason,
+          width: frame.width,
+          height: frame.height,
+          size: frame.size,
+          fileId: frame.fileId,
+          frameBufferSize: speechUploadedFrameIds.length
+        });
+        updateCheck('check6', 'pass');
+      } catch (e) {
+        appendDebugRecord('speech_frame_upload_error', {
+          reason: 'speech_loop',
+          error: String(e?.message || e)
+        });
+        log(`语音抓帧或上传失败: ${e.message || e}`, 'warning');
+      } finally {
+        speechFrameInFlight = false;
+      }
+    }
+
+    function startSpeechFrameLoop() {
+      if (!autoVisionEnabled || !videoEnabled) return;
+      if (speechModeActive) return;
+      resetSpeechCaptureState();
+      speechModeActive = true;
+      void captureSpeechFrame(); // speech started instant frame
+      speechFrameTimer = setInterval(() => {
+        void captureSpeechFrame();
+      }, SPEECH_FRAME_INTERVAL_MS);
+      log('检测到用户说话，开始 1 秒 1 帧采样并预上传', 'info');
+    }
+
+    function scheduleSpeechBundleSend(reason) {
+      if (!autoVisionEnabled) return;
+      clearSpeechBundleRetryTimer();
+      if (speechFlushTimer) clearTimeout(speechFlushTimer);
+      const delay = getSpeechBundleDelay(reason);
+      appendDebugRecord('speech_bundle_schedule', { reason, delayMs: delay });
+      speechFlushTimer = setTimeout(() => {
+        speechFlushTimer = null;
+        void sendSpeechBundleToAgent(reason);
+      }, delay);
+    }
+
+    function setAutoVisionEnabled(enabled, { quiet = false } = {}) {
+      autoVisionEnabled = !!enabled;
+      if (!autoVisionEnabled) resetSpeechCaptureState();
+      if (!quiet) {
+        log(autoVisionEnabled ? '语音联动视觉已开启' : '语音联动视觉已关闭', 'info');
+      }
+    }
+
+    function stopFallbackPreview() {
+      if (fallbackPreviewStream) {
+        fallbackPreviewStream.getTracks().forEach((t) => t.stop());
+        fallbackPreviewStream = null;
+      }
+      const fallbackVideo = document.getElementById('fallback-player');
+      if (fallbackVideo) {
+        fallbackVideo.pause?.();
+        fallbackVideo.srcObject = null;
+        fallbackVideo.remove();
+      }
+    }
+
+    async function logMediaDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter((d) => d.kind === 'videoinput');
+        const mics = devices.filter((d) => d.kind === 'audioinput');
+        log(`设备列表: 摄像头=${cams.length}, 麦克风=${mics.length}`, 'info');
+      } catch (e) {
+        log(`设备枚举失败: ${e.message || e}`, 'error');
+      }
+    }
+
+    function getLocalVideoEl() {
+      return document.querySelector('#local-player video');
+    }
+
+    async function waitForLocalVideo(timeoutMs = 3000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const video = getLocalVideoEl();
+        if (video && video.videoWidth > 0 && video.videoHeight > 0) return video;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return null;
+    }
+
+    async function ensureVisiblePreview() {
+      const sdkVideo = await waitForLocalVideo(1800);
+      if (sdkVideo) {
+        return { video: sdkVideo, source: 'sdk' };
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('getUserMedia_not_supported');
+      }
+
+      stopFallbackPreview();
+      fallbackPreviewStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+
+      const root = document.getElementById('local-player');
+      const fallback = document.createElement('video');
+      fallback.id = 'fallback-player';
+      fallback.autoplay = true;
+      fallback.muted = true;
+      fallback.playsInline = true;
+      fallback.srcObject = fallbackPreviewStream;
+      root.innerHTML = '';
+      root.appendChild(fallback);
+      await fallback.play().catch(() => {});
+
+      const ready = await waitForLocalVideo(1800);
+      if (!ready) throw new Error('fallback_preview_not_ready');
+      return { video: ready, source: 'fallback' };
+    }
+
+    function captureFrameBlob(videoEl) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('canvas_context_unavailable');
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('frame_to_blob_failed'));
+        }, 'image/jpeg', 0.9);
+      });
+    }
+
+    async function uploadImageToCoze({ baseURL, accessToken, imageBlob }) {
+      appendDebugRecord('upload_start', {
+        baseURL,
+        imageSize: imageBlob?.size || 0,
+        imageType: imageBlob?.type || ''
+      });
+      const form = new FormData();
+      const file = new File([imageBlob], `frame_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      form.append('file', file);
+
+      const resp = await fetch(`${baseURL}/v1/files/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: form
+      });
+
+      const text = await resp.text();
+      let json;
+      try { json = JSON.parse(text); } catch (_) { json = { raw: text }; }
+      if (!resp.ok) {
+        appendDebugRecord('upload_error', { status: resp.status, body: text });
+        throw new Error(`upload_http_${resp.status}: ${text}`);
+      }
+      if (json.code != null && json.code !== 0) {
+        appendDebugRecord('upload_error', { code: json.code, msg: json.msg || '', body: text });
+        throw new Error(`upload_code_${json.code}: ${json.msg || text}`);
+      }
+      const fileId = json?.data?.id;
+      if (!fileId) {
+        appendDebugRecord('upload_error', { status: resp.status, body: text, reason: 'missing_file_id' });
+        throw new Error(`upload_missing_file_id: ${text}`);
+      }
+      appendDebugRecord('upload_success', { fileId, status: resp.status });
+      return fileId;
+    }
+
+    function getAccessConfig() {
+      const baseURL = document.getElementById('baseUrl').value;
+      const accessToken = document.getElementById('accessToken').value.trim();
+      if (!accessToken) throw new Error('missing_access_token');
+      return { baseURL, accessToken };
+    }
+
+    async function sendObjectStringItems(items) {
+      if (!client || typeof client.sendMessage !== 'function') {
+        throw new Error('send_message_not_supported');
+      }
+      if (!Array.isArray(items) || !items.length) {
+        throw new Error('empty_message_items');
+      }
+
+      const message = {
+        id: `msg_${Date.now()}`,
+        event_type: 'conversation.message.create',
+        data: {
+          role: 'user',
+          content_type: 'object_string',
+          content: JSON.stringify(items)
+        }
+      };
+
+      appendDebugRecord('send_message', {
+        messageId: message.id,
+        itemCount: items.length,
+        imageCount: items.filter((x) => x?.type === 'image').length,
+        hasText: items.some((x) => x?.type === 'text'),
+        textPreview: (() => {
+          const t = items.find((x) => x?.type === 'text')?.text || '';
+          return t.length > 100 ? `${t.slice(0, 100)}...` : t;
+        })(),
+        fileIds: items.filter((x) => x?.type === 'image').map((x) => x.file_id).filter(Boolean)
+      });
+      await client.sendMessage(message);
+    }
+
+    async function setMicState(enabled, { quiet = false } = {}) {
+      if (!client) return false;
+      try {
+        await client.setAudioEnable(enabled);
+        micEnabled = enabled;
+        document.getElementById('btnMic').textContent = micEnabled ? '关闭麦克风' : '开启麦克风';
+        if (enabled) updateCheck('check4', 'pass');
+        if (!quiet) log(enabled ? '麦克风已开启，请直接说话' : '麦克风已关闭', 'info');
+        return true;
+      } catch (e) {
+        log(`${enabled ? '开启' : '关闭'}麦克风失败: ${e.message || e}`, 'error');
+        return false;
+      }
+    }
+
+    async function sendCurrentFrameToAgent({ text = '', reason = 'manual', quiet = false } = {}) {
+      if (!client) throw new Error('not_connected');
+      if (!videoEnabled) throw new Error('video_not_enabled');
+
+      const { baseURL, accessToken } = getAccessConfig();
+
+      const video = await waitForLocalVideo(2000);
+      if (!video) throw new Error('local_video_not_ready');
+
+      const blob = await captureFrameBlob(video);
+      const fileId = await uploadImageToCoze({ baseURL, accessToken, imageBlob: blob });
+      const items = [{ type: 'image', file_id: fileId }];
+      if (text && text.trim()) items.push({ type: 'text', text: text.trim() });
+      await sendObjectStringItems(items);
+      updateCheck('check6', 'pass');
+
+      if (!quiet) {
+        log(`图片帧已发送(${reason}), file_id=${fileId}${text ? ', 含用户文本' : ''}`, 'success');
+      }
+
+      return { fileId, size: blob.size };
+    }
+
+    async function sendSpeechBundleToAgent(reason = 'speech_stopped') {
+      if (!autoVisionEnabled || !client || !videoEnabled) return;
+      if (speechBundleInFlight) return;
+      const settleStart = Date.now();
+      while (speechFrameInFlight && Date.now() - settleStart < SPEECH_UPLOAD_SETTLE_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, 80));
+      }
+      if (speechFrameInFlight) {
+        appendDebugRecord('speech_upload_wait_timeout', {
+          reason,
+          timeoutMs: SPEECH_UPLOAD_SETTLE_TIMEOUT_MS
+        });
+      }
+
+      let frameFileIds = speechUploadedFrameIds.slice();
+      speechUploadedFrameIds = [];
+      if (!frameFileIds.length) {
+        try {
+          const frame = await captureAndUploadCurrentFrame('speech_finalize_fallback');
+          frameFileIds.push(frame.fileId);
+          appendDebugRecord('speech_frame_uploaded', {
+            reason: frame.reason,
+            width: frame.width,
+            height: frame.height,
+            size: frame.size,
+            fileId: frame.fileId,
+            frameBufferSize: frameFileIds.length
+          });
+          updateCheck('check6', 'pass');
+        } catch (e) {
+          appendDebugRecord('speech_bundle_skip', {
+            reason,
+            because: 'no_frame_file_id',
+            error: String(e?.message || e)
+          });
+        }
+      }
+      if (!frameFileIds.length) return;
+
+      const userText = (latestCompletedUserSpeechText || currentUserSpeechText || '').trim();
+      if (!userText) {
+        if (speechBundleRetryCount < SPEECH_BUNDLE_MAX_RETRY) {
+          speechBundleRetryCount += 1;
+          speechUploadedFrameIds = frameFileIds.slice(-SPEECH_MAX_FRAMES);
+          appendDebugRecord('speech_bundle_retry', {
+            reason,
+            retryCount: speechBundleRetryCount,
+            maxRetry: SPEECH_BUNDLE_MAX_RETRY,
+            frameCount: speechUploadedFrameIds.length,
+            delayMs: SPEECH_BUNDLE_RETRY_DELAY_MS
+          });
+          log(`未拿到用户语音文本，${SPEECH_BUNDLE_RETRY_DELAY_MS}ms 后重试(${speechBundleRetryCount}/${SPEECH_BUNDLE_MAX_RETRY})`, 'warning');
+          clearSpeechBundleRetryTimer();
+          speechBundleRetryTimer = setTimeout(() => {
+            speechBundleRetryTimer = null;
+            void sendSpeechBundleToAgent(`${reason}_retry_${speechBundleRetryCount}`);
+          }, SPEECH_BUNDLE_RETRY_DELAY_MS);
+          return;
+        }
+        appendDebugRecord('speech_bundle_fallback', {
+          reason,
+          frameCount: frameFileIds.length,
+          because: 'missing_user_text_after_retry'
+        });
+        if (assistantStartedAfterSpeech || assistantChatInProgress) {
+          log('多次重试后仍无语音文本，检测到 AI 抢答，将中断后发送图片', 'warning');
+        } else {
+          log('多次重试后仍无语音文本，降级仅发送图片帧', 'warning');
+        }
+      } else {
+        speechBundleRetryCount = 0;
+        clearSpeechBundleRetryTimer();
+      }
+      if (assistantStartedAfterSpeech || assistantChatInProgress) {
+        appendDebugRecord('assistant_interrupt_before_bundle', {
+          reason,
+          frameCount: frameFileIds.length,
+          hasUserText: !!userText,
+          speechStarted: assistantStartedAfterSpeech,
+          chatInProgress: assistantChatInProgress
+        });
+        try {
+          await client.interrupt();
+          assistantStartedAfterSpeech = false;
+          assistantChatInProgress = false;
+          log('检测到 AI 抢答，已中断并等待图文补全后重新回答', 'warning');
+        } catch (interruptErr) {
+          appendDebugRecord('speech_bundle_skip', {
+            reason,
+            frameCount: frameFileIds.length,
+            because: 'assistant_interrupt_failed',
+            error: String(interruptErr?.message || interruptErr)
+          });
+          log(`AI 抢答中断失败，跳过本轮图文发送: ${interruptErr?.message || interruptErr}`, 'warning');
+          return;
+        }
+      }
+
+      speechBundleInFlight = true;
+      try {
+        const items = frameFileIds.map((id) => ({ type: 'image', file_id: id }));
+        if (userText) {
+          items.push({ type: 'text', text: userText });
+        }
+        await sendObjectStringItems(items);
+        updateCheck('check6', 'pass');
+        const previewText = userText ? (userText.length > 40 ? `${userText.slice(0, 40)}...` : userText) : '';
+        appendDebugRecord('speech_bundle_sent', {
+          reason,
+          frameCount: frameFileIds.length,
+          uploadedFileIds: frameFileIds,
+          userTextPreview: previewText,
+          mode: userText ? 'image+text' : 'image_only'
+        });
+        if (userText) {
+          log(`语音联动图文已发送(${reason}): ${frameFileIds.length} 张图, 文本="${previewText}"`, 'success');
+        } else {
+          log(`语音联动图片已发送(${reason}): ${frameFileIds.length} 张图(无文本)`, 'success');
+        }
+      } catch (e) {
+        speechUploadedFrameIds = frameFileIds.slice(-SPEECH_MAX_FRAMES);
+        appendDebugRecord('speech_bundle_error', {
+          reason,
+          frameCount: frameFileIds.length,
+          error: String(e?.message || e)
+        });
+        log(`语音联动图文发送失败(${reason}): ${e.message || e}`, 'error');
+      } finally {
+        speechBundleRetryCount = 0;
+        speechBundleInFlight = false;
+        assistantStartedAfterSpeech = false;
+      }
+    }
+
     // 初始化 SDK
     async function initSDK() {
       log('正在加载 @coze/realtime-api SDK...');
       try {
-        const module = await import('https://esm.sh/@coze/realtime-api@latest');
+        const module = await import('https://esm.sh/@coze/realtime-api@1.3.2');
         RealtimeClient = module.RealtimeClient;
         EventNames = module.EventNames;
         RealtimeUtils = module.RealtimeUtils;
@@ -289,6 +1173,12 @@
       const accessToken = document.getElementById('accessToken').value.trim();
       const botId = document.getElementById('botId').value.trim();
       const voiceId = document.getElementById('voiceId').value.trim();
+      appendDebugRecord('connect_click', {
+        baseURL,
+        botId,
+        hasToken: !!accessToken,
+        voiceId: voiceId || ''
+      });
 
       if (!accessToken || !botId) {
         log('请填写 Access Token 和 Bot ID', 'error');
@@ -321,6 +1211,7 @@
           updateCheck('check2v', 'fail');
           return;
         }
+        await logMediaDevices();
       } catch (e) {
         log(`权限检查失败: ${e.message}`, 'error');
         updateCheck('check2', 'fail');
@@ -356,7 +1247,7 @@
 
           videoConfig: {
             renderDom: 'local-player',
-            videoOnDefault: false
+            videoOnDefault: true
           }
         });
 
@@ -369,28 +1260,64 @@
 
         // 监听事件
         client.on(EventNames.CONNECTED, async (e) => {
+          appendDebugRecord('connected', { ok: true });
           log('连接成功!', 'success');
           updateCheck('check3', 'pass');
           updateStatus('connected');
-          document.getElementById('btnConnect').disabled = true;
-          document.getElementById('btnDisconnect').disabled = false;
-          document.getElementById('btnMic').disabled = false;
-          document.getElementById('btnVideo').disabled = false;
+          setConnectedButtons(true);
 
-          // 默认不自动开启视频（避免占用/重复 capture 影响音频测试）
-          videoEnabled = false;
-          document.getElementById('btnVideo').textContent = '开启视频';
+          // 连接后自动尝试开视频，保证 preview 和“视觉链路”尽快可验证。
+          try {
+            await client.setVideoEnable(true);
+            videoEnabled = true;
+            document.getElementById('btnVideo').textContent = '关闭视频';
+            const { video, source } = await ensureVisiblePreview();
+            const sourceLabel = source === 'fallback' ? 'fallback(getUserMedia)' : 'sdk(renderDom)';
+            log(`视频预览已就绪: ${video.videoWidth}x${video.videoHeight} (${sourceLabel})`, 'success');
+          } catch (err) {
+            log(`自动开启 SDK 视频失败: ${err.message || err}`, 'error');
+            try {
+              const { video } = await ensureVisiblePreview();
+              videoEnabled = true;
+              document.getElementById('btnVideo').textContent = '关闭视频';
+              log(`已切换到 fallback 本地预览: ${video.videoWidth}x${video.videoHeight}`, 'warning');
+            } catch (fallbackErr) {
+              videoEnabled = false;
+              document.getElementById('btnVideo').textContent = '开启视频';
+              log(`fallback 预览也失败: ${fallbackErr.message || fallbackErr}`, 'error');
+            }
+          }
+
+          const micReady = await setMicState(true, { quiet: true });
+          if (micReady) {
+            log('已进入实时对话模式：麦克风已自动开启', 'success');
+          }
         });
 
-        client.on(EventNames.ERROR, (e) => {
-          log(`错误: ${JSON.stringify(e)}`, 'error');
+        client.on(EventNames.ERROR, (arg1, arg2) => {
+          const { eventName, event } = normalizeEventArgs(arg1, arg2, EventNames.ERROR || 'client.error');
+          appendDebugRecord('client_error', {
+            eventName,
+            rawType: typeof event,
+            keys: objectKeysSafe(event),
+            dataKeys: objectKeysSafe((event && typeof event === 'object') ? event.data : null)
+          });
+          log(`错误(${eventName}): ${JSON.stringify(event)}`, 'error');
         });
 
-        client.on(EventNames.ALL_SERVER, (e) => {
+        client.on(EventNames.ALL_SERVER, (arg1, arg2) => {
+          const { eventName: dispatchedEventName, event: e } = normalizeEventArgs(arg1, arg2, 'unknown');
           // 注意：该 SDK 事件在某些版本里会直接给一个 string（事件名）
-          const t = (typeof e === 'string')
-            ? e
-            : (e?.event_type || e?.type || e?.event?.type || e?.data?.type || e?.data?.event_type || 'unknown');
+          const t = dispatchedEventName || extractEventType(e) || 'unknown';
+          const tn = String(t || '').toLowerCase();
+          appendDebugRecord('server_event', {
+            type: t,
+            dispatchedEventName,
+            rawType: typeof e,
+            role: extractRoleFromEvent(e),
+            keys: objectKeysSafe(e),
+            dataKeys: objectKeysSafe((e && typeof e === 'object') ? e.data : null)
+          });
 
           log(`服务器事件: ${t}`, 'event');
 
@@ -398,9 +1325,9 @@
           if (t === 'unknown') {
             try {
               const preview = {
-                keys: Object.keys(e || {}),
-                dataKeys: Object.keys((e && e.data) || {}),
-                raw: (typeof e === 'string' ? e : JSON.stringify(e)).slice(0, 400)
+                keys: objectKeysSafe(e),
+                dataKeys: objectKeysSafe((e && typeof e === 'object') ? e.data : null),
+                raw: (typeof e === 'string' ? e : JSON.stringify(e || {})).slice(0, 400)
               };
               log(`事件预览: ${JSON.stringify(preview)}`, 'info');
             } catch {}
@@ -410,22 +1337,103 @@
           if (typeof t === 'string') {
             if (t.includes('audio.user')) updateCheck('check4', 'pass');
             if (t.includes('audio.agent') || t.includes('conversation.message') || t.includes('response.audio')) updateCheck('check5', 'pass');
+            if (tn.includes('audio.user.speech_started')) {
+              assistantStartedAfterSpeech = false;
+              assistantChatInProgress = false;
+              currentUserSpeechText = '';
+              latestCompletedUserSpeechText = '';
+              speechBundleRetryCount = 0;
+              clearSpeechBundleRetryTimer();
+              appendDebugRecord('speech_state', { action: 'started', by: 'all_server' });
+              if (autoVisionEnabled) startSpeechFrameLoop();
+            }
+            if (tn.includes('audio.user.speech_stopped')) {
+              stopSpeechFrameLoop();
+              appendDebugRecord('speech_state', { action: 'stopped', by: 'all_server' });
+              if (autoVisionEnabled) scheduleSpeechBundleSend('speech_stopped');
+            }
+            if (tn.includes('audio.agent.speech_started')) {
+              assistantStartedAfterSpeech = true;
+              appendDebugRecord('assistant_state', { action: 'speech_started', by: 'all_server' });
+            }
+            if (tn.includes('conversation.chat.created') || tn.includes('conversation.chat.in_progress')) {
+              assistantChatInProgress = true;
+              appendDebugRecord('assistant_state', { action: 'chat_in_progress', by: 'all_server', type: t });
+            }
+            if (tn.includes('conversation.chat.completed') || tn.includes('conversation.chat.failed')) {
+              assistantChatInProgress = false;
+              appendDebugRecord('assistant_state', { action: 'chat_completed', by: 'all_server', type: t });
+            }
           }
 
           // 对于 object payload（若未来有）：尝试解析文本/音频 delta
-          const isTextDelta = (t === 'conversation.message.delta' || t === 'conversation.message.completed');
-          const isAudioDelta = (t === 'response.audio.delta' || t === 'response.audio.completed');
+          const isTextDelta = tn.includes('conversation.message.delta') || tn.includes('conversation.message.completed');
+          const isAudioTranscript = tn.includes('conversation.audio_transcript.delta') || tn.includes('conversation.audio_transcript.completed');
+          const isAudioDelta = tn.includes('response.audio.delta') || tn.includes('response.audio.completed');
 
-          if (isTextDelta) {
-            const delta = e?.data?.delta || e?.delta || '';
-            const text = (typeof delta === 'string' ? delta : '') || (e?.data?.content || '');
-            if (text) log(`AI 文本: ${String(text).slice(0, 200)}`, 'success');
-            updateCheck('check5', 'pass');
+          if (isAudioTranscript && !hasDirectAudioTranscriptBinding) {
+            handleUserTranscriptEvent(e, t, 'all_server');
+          }
+
+          if (isTextDelta && !hasDirectConversationMessageBinding) {
+            handleConversationMessageEvent(e, t, 'all_server');
           }
           if (isAudioDelta) {
             updateCheck('check5', 'pass');
           }
         });
+
+        if (EventNames.AUDIO_USER_SPEECH_STARTED) {
+          client.on(EventNames.AUDIO_USER_SPEECH_STARTED, () => {
+            assistantStartedAfterSpeech = false;
+            assistantChatInProgress = false;
+            currentUserSpeechText = '';
+            latestCompletedUserSpeechText = '';
+            speechBundleRetryCount = 0;
+            clearSpeechBundleRetryTimer();
+            appendDebugRecord('speech_state', { action: 'started', by: 'event_name' });
+            if (autoVisionEnabled) startSpeechFrameLoop();
+          });
+        }
+        if (EventNames.AUDIO_USER_SPEECH_STOPPED) {
+          client.on(EventNames.AUDIO_USER_SPEECH_STOPPED, () => {
+            stopSpeechFrameLoop();
+            appendDebugRecord('speech_state', { action: 'stopped', by: 'event_name' });
+            if (autoVisionEnabled) scheduleSpeechBundleSend('speech_stopped_event');
+          });
+        }
+        if (EventNames.AUDIO_AGENT_SPEECH_STARTED) {
+          client.on(EventNames.AUDIO_AGENT_SPEECH_STARTED, () => {
+            assistantStartedAfterSpeech = true;
+            appendDebugRecord('assistant_state', { action: 'speech_started', by: 'event_name' });
+          });
+        }
+
+        const directAudioTranscriptBindings = bindEventNamesByPattern({
+          label: 'direct_audio_transcript',
+          patterns: [
+            'conversation.audio_transcript.delta',
+            'conversation.audio_transcript.completed',
+            'audio_transcript.delta',
+            'audio_transcript.completed'
+          ],
+          handler: (evt, eventName, source) => {
+            handleUserTranscriptEvent(evt, extractEventType(evt) || eventName, source);
+          }
+        });
+        hasDirectAudioTranscriptBinding = directAudioTranscriptBindings.length > 0;
+
+        const directConversationMessageBindings = bindEventNamesByPattern({
+          label: 'direct_conversation_message',
+          patterns: [
+            'conversation.message.delta',
+            'conversation.message.completed'
+          ],
+          handler: (evt, eventName, source) => {
+            handleConversationMessageEvent(evt, extractEventType(evt) || eventName, source);
+          }
+        });
+        hasDirectConversationMessageBinding = directConversationMessageBindings.length > 0;
 
         client.on(EventNames.AUDIO_UNMUTED, () => {
           log('麦克风已开启（AUDIO_UNMUTED）', 'success');
@@ -447,30 +1455,33 @@
     // 断开连接
     window.testDisconnect = async function() {
       if (client) {
+        appendDebugRecord('disconnect_click', { connected: true });
         log('断开连接...');
         await client.disconnect();
         client = null;
+        resetSpeechCaptureState();
+        latestCompletedUserSpeechText = '';
+        stopFallbackPreview();
         updateStatus('disconnected');
-        document.getElementById('btnConnect').disabled = false;
-        document.getElementById('btnDisconnect').disabled = true;
-        document.getElementById('btnMic').disabled = true;
-        document.getElementById('btnVideo').disabled = true;
+        setConnectedButtons(false);
         document.getElementById('btnVideo').textContent = '开启视频';
         videoEnabled = false;
+        micEnabled = false;
+        document.getElementById('btnMic').textContent = '开启麦克风';
         log('已断开', 'info');
 
         // 检查结果
-        const checks = ['check1', 'check2', 'check2v', 'check3', 'check4', 'check5'];
+        const checks = ['check1', 'check2', 'check2v', 'check3', 'check4', 'check5', 'check6'];
         const passed = checks.filter(id =>
           document.getElementById(id).classList.contains('pass')
         ).length;
 
-        if (passed >= 4) {
-          showConclusion('success', `验证通过 (${passed}/5)，Coze Realtime API 可用于本项目`);
-        } else if (passed >= 2) {
-          showConclusion('warning', `部分验证通过 (${passed}/5)，需要进一步测试`);
+        if (passed >= 5) {
+          showConclusion('success', `验证通过 (${passed}/7)，音视频+视觉链路基本可用`);
+        } else if (passed >= 3) {
+          showConclusion('warning', `部分验证通过 (${passed}/7)，需要继续排查视觉链路`);
         } else {
-          showConclusion('fail', `验证失败 (${passed}/5)，建议使用替代方案`);
+          showConclusion('fail', `验证失败 (${passed}/7)，建议优先用“抓拍发送”方式验证视觉能力`);
         }
       }
     };
@@ -478,10 +1489,7 @@
     // 切换麦克风
     window.toggleMic = async function() {
       if (!client) return;
-      micEnabled = !micEnabled;
-      await client.setAudioEnable(micEnabled);
-      document.getElementById('btnMic').textContent = micEnabled ? '关闭麦克风' : '开启麦克风';
-      log(micEnabled ? '麦克风已开启，请说话...' : '麦克风已关闭', 'info');
+      await setMicState(!micEnabled);
     };
 
     // 切换视频
@@ -492,9 +1500,52 @@
         log(`setVideoEnable(${videoEnabled})...`, 'info');
         await client.setVideoEnable(videoEnabled);
         document.getElementById('btnVideo').textContent = videoEnabled ? '关闭视频' : '开启视频';
-        log(videoEnabled ? '视频已开启' : '视频已关闭', 'info');
+        if (videoEnabled) {
+          const { video, source } = await ensureVisiblePreview();
+          const sourceLabel = source === 'fallback' ? 'fallback(getUserMedia)' : 'sdk(renderDom)';
+          log(`视频已开启: ${video.videoWidth}x${video.videoHeight} (${sourceLabel})`, 'success');
+        } else {
+          resetSpeechCaptureState();
+          stopFallbackPreview();
+          log('视频已关闭', 'info');
+        }
       } catch (e) {
         log(`视频切换失败: ${e.message || e}`, 'error');
+        if (videoEnabled) {
+          // SDK 开视频失败时，仍尝试 fallback，便于继续做“抓拍发送”调试。
+          try {
+            const { video } = await ensureVisiblePreview();
+            videoEnabled = true;
+            document.getElementById('btnVideo').textContent = '关闭视频';
+            log(`已切换到 fallback 本地预览: ${video.videoWidth}x${video.videoHeight}`, 'warning');
+            return;
+          } catch (fallbackErr) {
+            log(`fallback 预览失败: ${fallbackErr.message || fallbackErr}`, 'error');
+          }
+        }
+        videoEnabled = !videoEnabled;
+        document.getElementById('btnVideo').textContent = videoEnabled ? '关闭视频' : '开启视频';
+      }
+    };
+
+    // 抓拍一帧并作为 image 消息发给智能体（用于验证视觉理解）
+    window.captureAndSendFrame = async function() {
+      if (!client) {
+        log('尚未连接，无法发送图片', 'error');
+        return;
+      }
+      if (!videoEnabled) {
+        log('请先开启视频，再抓拍发送', 'error');
+        return;
+      }
+
+      try {
+        log('正在抓拍当前画面...', 'info');
+        const text = (latestCompletedUserSpeechText || currentUserSpeechText || '').trim();
+        await sendCurrentFrameToAgent({ text, reason: 'manual' });
+      } catch (e) {
+        log(`抓拍发送失败: ${e.message || e}`, 'error');
+        updateCheck('check6', 'fail');
       }
     };
 
@@ -507,6 +1558,21 @@
     // 页面加载时初始化
     window.addEventListener('load', async () => {
       log('POC 页面已加载');
+      const isSecureLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (location.protocol !== 'https:' && !isSecureLocalhost) {
+        log('当前不是安全上下文（HTTPS/localhost），摄像头可能无法工作', 'error');
+      }
+      const autoVisionEl = document.getElementById('autoVision');
+      autoVisionEnabled = !!autoVisionEl?.checked;
+      autoVisionEl?.addEventListener('change', (evt) => {
+        setAutoVisionEnabled(!!evt.target.checked);
+      });
+      if (!autoVisionEnabled) {
+        log('语音联动视觉已关闭', 'info');
+      } else {
+        log('语音联动视觉已开启：说话时将按 1 秒 1 帧采样', 'info');
+      }
+      setConnectedButtons(false);
       await initSDK();
     });
   </script>
