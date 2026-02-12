@@ -214,6 +214,10 @@ function getVideoElementFromRenderDom(renderDomId) {
   if (dom instanceof HTMLVideoElement) return dom;
   const videos = Array.from(dom.querySelectorAll?.('video') || []);
   if (!videos.length) return null;
+  const readyFallbackVideo = videos.find(
+    (video) => video.dataset?.fallbackPreview === '1' && video.videoWidth > 0 && video.videoHeight > 0
+  );
+  if (readyFallbackVideo) return readyFallbackVideo;
   const readyVideo = videos.find((video) => video.videoWidth > 0 && video.videoHeight > 0);
   if (readyVideo) return readyVideo;
   const fallbackVideo = videos.find((video) => video.dataset?.fallbackPreview === '1');
@@ -395,11 +399,13 @@ export function initRealtime({ ui, getConfig } = {}) {
     }
   };
 
-  const ensureVisiblePreview = async ({ renderDomId, facingMode }) => {
-    const sdkVideo = await waitForRenderableVideo(renderDomId, 1400);
-    if (sdkVideo) {
-      stopFallbackPreview();
-      return { video: sdkVideo, source: 'sdk' };
+  const ensureVisiblePreview = async ({ renderDomId, facingMode, forceFallback = false }) => {
+    if (!forceFallback) {
+      const sdkVideo = await waitForRenderableVideo(renderDomId, 1400);
+      if (sdkVideo) {
+        stopFallbackPreview();
+        return { video: sdkVideo, source: 'sdk' };
+      }
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -1012,6 +1018,7 @@ export function initRealtime({ ui, getConfig } = {}) {
         const mode = ui?.mode || 'explore';
         const videoRenderDomId = mode === 'companion' ? 'companion-preview' : 'camera-preview';
         const facingMode = mode === 'companion' ? 'user' : 'environment';
+        const forceRearCameraPreview = mode === 'explore';
         const currentClient = ensureClient({ videoRenderDomId: useVideo ? videoRenderDomId : '' });
 
         await currentClient.connect();
@@ -1019,20 +1026,34 @@ export function initRealtime({ ui, getConfig } = {}) {
 
         if (useVideo) {
           let sdkVideoEnabled = true;
-          try {
-            await currentClient.setVideoEnable(true);
-          } catch (error) {
+          if (!forceRearCameraPreview) {
+            try {
+              await currentClient.setVideoEnable(true);
+            } catch (error) {
+              sdkVideoEnabled = false;
+              logLocal('sdk_video_enable_error', { phase: 'connect', error: String(error?.message || error) });
+            }
+          } else {
             sdkVideoEnabled = false;
-            logLocal('sdk_video_enable_error', { phase: 'connect', error: String(error?.message || error) });
+            logLocal('sdk_video_skipped', {
+              phase: 'connect',
+              reason: 'force_rear_camera_preview',
+              facingMode
+            });
           }
           try {
-            const preview = await ensureVisiblePreview({ renderDomId: videoRenderDomId, facingMode });
+            const preview = await ensureVisiblePreview({
+              renderDomId: videoRenderDomId,
+              facingMode,
+              forceFallback: forceRearCameraPreview
+            });
             videoEnabled = true;
             logLocal('preview_ready', {
               phase: 'connect',
               source: preview.source,
               renderDomId: videoRenderDomId,
-              sdkVideoEnabled
+              sdkVideoEnabled,
+              facingMode
             });
           } catch (error) {
             videoEnabled = false;
@@ -1069,17 +1090,28 @@ export function initRealtime({ ui, getConfig } = {}) {
       if (!cameraPermissionGranted) return false;
       if (videoEnabled) return true;
       try {
+        const mode = ui?.mode || 'explore';
         const renderDomId = getCurrentVideoRenderDomId();
         const facingMode = getPreferredFacingMode();
-        let sdkVideoEnabled = true;
-        await client.setVideoEnable(true);
+        const forceRearCameraPreview = mode === 'explore';
+        let sdkVideoEnabled = !forceRearCameraPreview;
+        if (!forceRearCameraPreview) {
+          await client.setVideoEnable(true);
+        } else {
+          logLocal('sdk_video_skipped', {
+            phase: 'enable_video',
+            reason: 'force_rear_camera_preview',
+            facingMode
+          });
+        }
         try {
-          const preview = await ensureVisiblePreview({ renderDomId, facingMode });
+          const preview = await ensureVisiblePreview({ renderDomId, facingMode, forceFallback: forceRearCameraPreview });
           logLocal('preview_ready', {
             phase: 'enable_video',
             source: preview.source,
             renderDomId,
-            sdkVideoEnabled
+            sdkVideoEnabled,
+            facingMode
           });
         } catch (error) {
           videoEnabled = false;
