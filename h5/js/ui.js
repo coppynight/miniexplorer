@@ -18,6 +18,7 @@ function setStateBadge(mode, text, tone) {
 // Unified UI adapter for Explore/Companion.
 export function createUI() {
   const debugUIEnabled = false;
+  const showConversationText = false;
   const ui = {
     mode: 'explore',
 
@@ -90,6 +91,7 @@ export function createUI() {
 
     setMode(mode) {
       this.mode = mode;
+      if (!showConversationText) return;
       if (mode === 'explore') {
         setText('explore-status', '对准想看的东西');
       } else {
@@ -105,6 +107,7 @@ export function createUI() {
     },
 
     setCameraHint(text) {
+      if (!showConversationText) return;
       // Reuse status area for hint.
       if (this.mode === 'explore') {
         if (text) setText('explore-status', text);
@@ -114,6 +117,7 @@ export function createUI() {
     },
 
     setErrorHint(text) {
+      if (!showConversationText) return;
       const friendly = text || '我刚刚卡了一下，点一下再试试～';
       if (this.mode === 'explore') {
         setText('explore-status', friendly);
@@ -124,6 +128,7 @@ export function createUI() {
     },
 
     setReplyText(text) {
+      if (!showConversationText) return;
       if (this.mode === 'explore') {
         setText('explore-status', text);
       } else {
@@ -153,7 +158,7 @@ export function createUI() {
           face.textContent = '😊';
           dot.className = 'ai-indicator-dot idle';
           waves.classList.remove('active');
-          setText('explore-status', '点一下开始对话（需要麦克风）');
+          if (showConversationText) setText('explore-status', '点一下开始对话（需要麦克风）');
           setStateBadge(mode, 'Ready');
         }
 
@@ -163,7 +168,7 @@ export function createUI() {
           waves.classList.remove('active');
           setStateBadge(mode, 'Listening');
           // keep current text
-          if ($('explore-status')?.textContent?.includes('点一下')) {
+          if (showConversationText && $('explore-status')?.textContent?.includes('点一下')) {
             setText('explore-status', '对准想看的东西，随时说话');
           }
         }
@@ -172,7 +177,7 @@ export function createUI() {
           face.textContent = '😮';
           dot.className = 'ai-indicator-dot listening';
           waves.classList.add('active');
-          setText('explore-status', '我在听…');
+          if (showConversationText) setText('explore-status', '我在听…');
           setStateBadge(mode, 'Listening');
         }
 
@@ -180,7 +185,7 @@ export function createUI() {
           face.textContent = '🥰';
           dot.className = 'ai-indicator-dot speaking';
           waves.classList.remove('active');
-          setText('explore-status', '让我想想…');
+          if (showConversationText) setText('explore-status', '让我想想…');
           setStateBadge(mode, 'Thinking');
         }
 
@@ -200,7 +205,7 @@ export function createUI() {
         if (state === 'NEED_PERMISSION') {
           face.textContent = '😊';
           waves.classList.remove('active');
-          setText('companion-status', '点一下开始对话（需要麦克风）');
+          if (showConversationText) setText('companion-status', '点一下开始对话（需要麦克风）');
           setStateBadge(mode, 'Ready');
         }
 
@@ -209,7 +214,7 @@ export function createUI() {
           face.textContent = '😮';
           waves.classList.remove('active');
           setStateBadge(mode, 'Listening');
-          if ($('companion-status')?.textContent?.includes('点一下')) {
+          if (showConversationText && $('companion-status')?.textContent?.includes('点一下')) {
             setText('companion-status', '我在听，随时说话');
           }
         }
@@ -218,7 +223,7 @@ export function createUI() {
           sphere.classList.add('listening');
           face.textContent = '😮';
           waves.classList.add('active');
-          setText('companion-status', '我在听…');
+          if (showConversationText) setText('companion-status', '我在听…');
           setStateBadge(mode, 'Listening');
         }
 
@@ -226,7 +231,7 @@ export function createUI() {
           sphere.classList.add('speaking');
           face.textContent = '🥰';
           waves.classList.remove('active');
-          setText('companion-status', '让我想想…');
+          if (showConversationText) setText('companion-status', '让我想想…');
           setStateBadge(mode, 'Thinking');
         }
 
@@ -239,6 +244,13 @@ export function createUI() {
       }
     }
   };
+
+  if (!showConversationText) {
+    ['explore-status', 'companion-status', 'explore-state', 'companion-state'].forEach((id) => {
+      const el = $(id);
+      if (el) el.style.display = 'none';
+    });
+  }
 
   // initialize debug panel binding (no-op if elements absent)
   ui._ensureEventPanel();
