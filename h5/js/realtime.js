@@ -399,6 +399,66 @@ export function initRealtime({ ui, getConfig } = {}) {
     }
   };
 
+  const pickDeviceIdByFacing = async (facingMode) => {
+    if (!navigator.mediaDevices?.enumerateDevices) return '';
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videos = devices.filter((item) => item.kind === 'videoinput');
+      if (!videos.length) return '';
+      const rearKeywords = ['back', 'rear', 'environment', '后置'];
+      const frontKeywords = ['front', 'user', 'face', '前置'];
+      const keywords = facingMode === 'environment' ? rearKeywords : frontKeywords;
+      const found = videos.find((item) => {
+        const name = String(item.label || '').toLowerCase();
+        return keywords.some((keyword) => name.includes(keyword));
+      });
+      return found?.deviceId || '';
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const openFallbackCameraStream = async ({ facingMode }) => {
+    const base = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    };
+    const candidates = [];
+
+    if (facingMode) {
+      candidates.push({ strategy: `${facingMode}_exact`, video: { ...base, facingMode: { exact: facingMode } } });
+      candidates.push({ strategy: `${facingMode}_ideal`, video: { ...base, facingMode: { ideal: facingMode } } });
+    }
+
+    const preferredDeviceId = await pickDeviceIdByFacing(facingMode);
+    if (preferredDeviceId) {
+      candidates.push({
+        strategy: `${facingMode}_deviceid`,
+        video: { ...base, deviceId: { exact: preferredDeviceId } }
+      });
+    }
+
+    candidates.push({ strategy: 'default', video: { ...base } });
+
+    let lastError = null;
+    for (const candidate of candidates) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: candidate.video,
+          audio: false
+        });
+        return {
+          stream,
+          strategy: candidate.strategy
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw (lastError || new Error('fallback_camera_open_failed'));
+  };
+
   const ensureVisiblePreview = async ({ renderDomId, facingMode, forceFallback = false }) => {
     if (!forceFallback) {
       const sdkVideo = await waitForRenderableVideo(renderDomId, 1400);
@@ -413,14 +473,8 @@ export function initRealtime({ ui, getConfig } = {}) {
     }
 
     stopFallbackPreview();
-    fallbackPreviewStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: facingMode },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      },
-      audio: false
-    });
+    const opened = await openFallbackCameraStream({ facingMode });
+    fallbackPreviewStream = opened.stream;
 
     const host = document.getElementById(renderDomId);
     if (!host) throw new Error(`render_dom_not_found:${renderDomId}`);
@@ -436,6 +490,8 @@ export function initRealtime({ ui, getConfig } = {}) {
         previewVideo.autoplay = true;
         previewVideo.muted = true;
         previewVideo.playsInline = true;
+        previewVideo.setAttribute('playsinline', 'true');
+        previewVideo.setAttribute('webkit-playsinline', 'true');
         previewVideo.setAttribute('data-fallback-preview', '1');
         host.appendChild(previewVideo);
       }
@@ -444,12 +500,14 @@ export function initRealtime({ ui, getConfig } = {}) {
     previewVideo.autoplay = true;
     previewVideo.muted = true;
     previewVideo.playsInline = true;
+    previewVideo.setAttribute('playsinline', 'true');
+    previewVideo.setAttribute('webkit-playsinline', 'true');
     previewVideo.srcObject = fallbackPreviewStream;
     await previewVideo.play().catch(() => {});
 
     const ready = await waitForRenderableVideo(renderDomId, 2000);
     if (!ready) throw new Error('fallback_preview_not_ready');
-    return { video: ready, source: 'fallback' };
+    return { video: ready, source: `fallback:${opened.strategy}` };
   };
 
   const uploadImageToCoze = async ({ imageBlob }) => {
