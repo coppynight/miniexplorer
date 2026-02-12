@@ -6,6 +6,7 @@ export class ConversationEngine {
     this.mode = 'explore';
     this.cameraFacing = 'environment';
     this.starting = false;
+    this.userGestureGranted = false;
   }
 
   friendlyStartError(reason) {
@@ -24,11 +25,17 @@ export class ConversationEngine {
 
     await this.stop();
 
-    this.ui.showPermissionOverlay(true);
-    this.ui.setState('NEED_PERMISSION', mode);
+    if (!this.userGestureGranted) {
+      this.ui.showPermissionOverlay(true);
+      this.ui.setState('NEED_PERMISSION', mode);
+      return;
+    }
+
+    this.ui.showPermissionOverlay(false);
+    await this.startAfterUserGesture({ skipPermissionCheck: true, autoStart: true });
   }
 
-  async startAfterUserGesture() {
+  async startAfterUserGesture({ skipPermissionCheck = false, autoStart = false } = {}) {
     if (this.starting) return;
     this.starting = true;
     this.ui.setState('BOOTING', this.mode);
@@ -37,15 +44,17 @@ export class ConversationEngine {
       // Explore 模式优先尝试视频；若相机未授权会在 realtime 内自动降级到纯语音。
       const needVideo = this.mode === 'explore';
 
-      const connected = await this.app.realtime.connect({ enableVideo: needVideo });
+      const connected = await this.app.realtime.connect({ enableVideo: needVideo, skipPermissionCheck });
       if (!connected) {
         this.ui.setErrorHint(this.friendlyStartError(this.app.realtime.lastError));
+        if (autoStart) this.ui.showPermissionOverlay(true);
         return;
       }
 
       const audioReady = await this.app.realtime.enableAudio();
       if (!audioReady) {
         this.ui.setErrorHint(this.friendlyStartError(this.app.realtime.lastError));
+        if (autoStart) this.ui.showPermissionOverlay(true);
         return;
       }
 
@@ -56,6 +65,7 @@ export class ConversationEngine {
         } catch (_) {}
       }
 
+      this.userGestureGranted = true;
       this.ui.showPermissionOverlay(false);
       this.ui.setState('LISTENING', this.mode);
     } finally {

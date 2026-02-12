@@ -975,7 +975,7 @@ export function initRealtime({ ui, getConfig } = {}) {
       return cameraPermissionGranted;
     },
 
-    async connect({ enableVideo = false } = {}) {
+    async connect({ enableVideo = false, skipPermissionCheck = false } = {}) {
       let cfg = ensureConfigInteractive();
       if (!cfg.token) {
         setStatus('error', 'missing_COZE_TOKEN (set localStorage COZE_TOKEN)');
@@ -990,7 +990,9 @@ export function initRealtime({ ui, getConfig } = {}) {
       try {
         stopFallbackPreview();
         const needVideo = !!enableVideo;
-        const permission = await RealtimeUtils.checkDevicePermission(needVideo);
+        const permission = skipPermissionCheck
+          ? { audio: true, video: cameraPermissionGranted }
+          : await RealtimeUtils.checkDevicePermission(needVideo);
         if (!permission?.audio) {
           setStatus('error', 'mic_permission_denied');
           return false;
