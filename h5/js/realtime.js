@@ -4,6 +4,8 @@ import { RealtimeClient, EventNames, RealtimeUtils } from 'https://esm.sh/@coze/
 // /poc/coze-realtime-poc.html (speech-time frame upload + image[]/text bundle send).
 
 const DEFAULT_BASE = 'https://api.coze.cn';
+const DEFAULT_COZE_TOKEN = 'pat_WKWKErHsHlobn5UPgYdopkYWWhP23FQ9e1XDmovqjwIlgzJfXZkmf6dz0tdE7311';
+const DEFAULT_COZE_BOT_ID = '7598529675404886059';
 
 const STATUS_LABELS = {
   idle: 'Realtime: 未连接',
@@ -194,8 +196,8 @@ function ensureUserId() {
 
 const defaultGetConfig = () => ({
   baseUrl: localStorage.getItem('COZE_BASE_URL') || DEFAULT_BASE,
-  token: localStorage.getItem('COZE_TOKEN') || '',
-  botId: localStorage.getItem('COZE_BOT_ID') || '7598529675404886059',
+  token: localStorage.getItem('COZE_TOKEN') || DEFAULT_COZE_TOKEN,
+  botId: localStorage.getItem('COZE_BOT_ID') || DEFAULT_COZE_BOT_ID,
   connectorId: localStorage.getItem('COZE_CONNECTOR_ID') || '1024',
   roomMode: localStorage.getItem('COZE_ROOM_MODE') || 'default',
   debug: localStorage.getItem('COZE_DEBUG') === '1'
@@ -298,7 +300,7 @@ export function initRealtime({ ui, getConfig } = {}) {
     }
 
     if (!cfg.botId) {
-      const defaultBotId = localStorage.getItem('COZE_BOT_ID') || '7598529675404886059';
+      const defaultBotId = localStorage.getItem('COZE_BOT_ID') || DEFAULT_COZE_BOT_ID;
       const botIdInput = window.prompt('请输入 Coze Bot ID', defaultBotId);
       if (botIdInput && botIdInput.trim()) {
         localStorage.setItem('COZE_BOT_ID', botIdInput.trim());
