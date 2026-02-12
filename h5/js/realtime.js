@@ -166,7 +166,12 @@ function getVideoElementFromRenderDom(renderDomId) {
   const dom = document.getElementById(renderDomId);
   if (!dom) return null;
   if (dom instanceof HTMLVideoElement) return dom;
-  return dom.querySelector?.('video') || null;
+  const videos = Array.from(dom.querySelectorAll?.('video') || []);
+  if (!videos.length) return null;
+  const readyVideo = videos.find((video) => video.videoWidth > 0 && video.videoHeight > 0);
+  if (readyVideo) return readyVideo;
+  const fallbackVideo = videos.find((video) => video.dataset?.fallbackPreview === '1');
+  return fallbackVideo || videos[0];
 }
 
 async function waitForRenderableVideo(renderDomId, timeoutMs = 2000) {
@@ -208,6 +213,7 @@ export function initRealtime({ ui, getConfig } = {}) {
   let videoEnabled = false;
   let cameraPermissionGranted = true;
   let autoVisionEnabled = localStorage.getItem('H5_AUTO_VISION') !== '0';
+  let fallbackPreviewStream = null;
 
   let speechModeActive = false;
   let speechFrameTimer = null;
@@ -322,6 +328,78 @@ export function initRealtime({ ui, getConfig } = {}) {
     return mode === 'companion' ? 'companion-preview' : 'camera-preview';
   };
 
+  const getPreferredFacingMode = () => {
+    const mode = ui?.mode || 'explore';
+    return mode === 'companion' ? 'user' : 'environment';
+  };
+
+  const stopFallbackPreview = () => {
+    if (fallbackPreviewStream) {
+      fallbackPreviewStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch (_) {}
+      });
+      fallbackPreviewStream = null;
+    }
+    const fallbackVideos = Array.from(document.querySelectorAll('video[data-fallback-preview="1"]'));
+    for (const fallbackVideo of fallbackVideos) {
+      try { fallbackVideo.pause?.(); } catch (_) {}
+      try { fallbackVideo.srcObject = null; } catch (_) {}
+      if (!fallbackVideo.id) fallbackVideo.remove();
+      else fallbackVideo.removeAttribute('data-fallback-preview');
+    }
+  };
+
+  const ensureVisiblePreview = async ({ renderDomId, facingMode }) => {
+    const sdkVideo = await waitForRenderableVideo(renderDomId, 1400);
+    if (sdkVideo) {
+      stopFallbackPreview();
+      return { video: sdkVideo, source: 'sdk' };
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('getUserMedia_not_supported');
+    }
+
+    stopFallbackPreview();
+    fallbackPreviewStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facingMode },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+
+    const host = document.getElementById(renderDomId);
+    if (!host) throw new Error(`render_dom_not_found:${renderDomId}`);
+
+    let previewVideo = null;
+    if (host instanceof HTMLVideoElement) {
+      previewVideo = host;
+      previewVideo.setAttribute('data-fallback-preview', '1');
+    } else {
+      previewVideo = host.querySelector('video[data-fallback-preview="1"]');
+      if (!previewVideo) {
+        previewVideo = document.createElement('video');
+        previewVideo.autoplay = true;
+        previewVideo.muted = true;
+        previewVideo.playsInline = true;
+        previewVideo.setAttribute('data-fallback-preview', '1');
+        host.appendChild(previewVideo);
+      }
+    }
+
+    previewVideo.autoplay = true;
+    previewVideo.muted = true;
+    previewVideo.playsInline = true;
+    previewVideo.srcObject = fallbackPreviewStream;
+    await previewVideo.play().catch(() => {});
+
+    const ready = await waitForRenderableVideo(renderDomId, 2000);
+    if (!ready) throw new Error('fallback_preview_not_ready');
+    return { video: ready, source: 'fallback' };
+  };
+
   const uploadImageToCoze = async ({ imageBlob }) => {
     const { baseURL, accessToken } = getAccessConfig();
     const form = new FormData();
@@ -368,7 +446,19 @@ export function initRealtime({ ui, getConfig } = {}) {
   const captureAndUploadCurrentFrame = async (reason = 'speech_loop') => {
     if (!videoEnabled) throw new Error('video_not_enabled');
     const renderDomId = getCurrentVideoRenderDomId();
-    const video = await waitForRenderableVideo(renderDomId, 2200);
+    let video = await waitForRenderableVideo(renderDomId, 1600);
+    if (!video) {
+      const preview = await ensureVisiblePreview({
+        renderDomId,
+        facingMode: getPreferredFacingMode()
+      });
+      video = preview?.video || null;
+      logLocal('preview_ready', {
+        source: preview?.source || 'unknown',
+        reason,
+        renderDomId
+      });
+    }
     if (!video) throw new Error('video_render_not_ready');
     const blob = await captureFrameBlob(video);
     const fileId = await uploadImageToCoze({ imageBlob: blob });
@@ -811,6 +901,7 @@ export function initRealtime({ ui, getConfig } = {}) {
     client = null;
     audioEnabled = false;
     videoEnabled = false;
+    stopFallbackPreview();
     resetSpeechCaptureState();
 
     client = new RealtimeClient(buildClientConfig({ videoRenderDomId }));
@@ -843,6 +934,7 @@ export function initRealtime({ ui, getConfig } = {}) {
 
       setStatus('connecting');
       try {
+        stopFallbackPreview();
         const needVideo = !!enableVideo;
         const permission = await RealtimeUtils.checkDevicePermission(needVideo);
         if (!permission?.audio) {
@@ -863,17 +955,36 @@ export function initRealtime({ ui, getConfig } = {}) {
 
         const mode = ui?.mode || 'explore';
         const videoRenderDomId = mode === 'companion' ? 'companion-preview' : 'camera-preview';
+        const facingMode = mode === 'companion' ? 'user' : 'environment';
         const currentClient = ensureClient({ videoRenderDomId: useVideo ? videoRenderDomId : '' });
 
         await currentClient.connect();
         setStatus('connected');
 
         if (useVideo) {
+          let sdkVideoEnabled = true;
           try {
             await currentClient.setVideoEnable(true);
+          } catch (error) {
+            sdkVideoEnabled = false;
+            logLocal('sdk_video_enable_error', { phase: 'connect', error: String(error?.message || error) });
+          }
+          try {
+            const preview = await ensureVisiblePreview({ renderDomId: videoRenderDomId, facingMode });
             videoEnabled = true;
-          } catch (_) {}
+            logLocal('preview_ready', {
+              phase: 'connect',
+              source: preview.source,
+              renderDomId: videoRenderDomId,
+              sdkVideoEnabled
+            });
+          } catch (error) {
+            videoEnabled = false;
+            ui?.setCameraHint?.('视频预览启动失败，可继续语音对话');
+            logLocal('preview_error', { phase: 'connect', error: String(error?.message || error) });
+          }
         } else {
+          stopFallbackPreview();
           videoEnabled = false;
         }
 
@@ -902,17 +1013,40 @@ export function initRealtime({ ui, getConfig } = {}) {
       if (!cameraPermissionGranted) return false;
       if (videoEnabled) return true;
       try {
+        const renderDomId = getCurrentVideoRenderDomId();
+        const facingMode = getPreferredFacingMode();
+        let sdkVideoEnabled = true;
         await client.setVideoEnable(true);
+        try {
+          const preview = await ensureVisiblePreview({ renderDomId, facingMode });
+          logLocal('preview_ready', {
+            phase: 'enable_video',
+            source: preview.source,
+            renderDomId,
+            sdkVideoEnabled
+          });
+        } catch (error) {
+          videoEnabled = false;
+          setStatus('error', error);
+          logLocal('preview_error', { phase: 'enable_video', error: String(error?.message || error) });
+          return false;
+        }
         videoEnabled = true;
         return true;
       } catch (error) {
+        logLocal('sdk_video_enable_error', { phase: 'enable_video', error: String(error?.message || error) });
         setStatus('error', error);
         return false;
       }
     },
 
     async disableVideo() {
-      if (!client) return;
+      stopFallbackPreview();
+      if (!client) {
+        videoEnabled = false;
+        resetSpeechCaptureState();
+        return;
+      }
       if (!videoEnabled) return;
       try {
         await client.setVideoEnable(false);
@@ -922,6 +1056,7 @@ export function initRealtime({ ui, getConfig } = {}) {
     },
 
     async disconnect() {
+      stopFallbackPreview();
       if (!client) {
         setStatus('idle');
         return;

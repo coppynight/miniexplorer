@@ -334,6 +334,19 @@ body {
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 
+.camera-render-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.camera-render-host video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+}
+
 .camera-viewfinder {
   position: absolute;
   top: 50%;
@@ -491,9 +504,14 @@ body {
   overflow: hidden;
 }
 
+.camera-pip .camera-render-host {
+  z-index: 2;
+}
+
 .camera-pip-placeholder {
   font-size: 28px;
   opacity: 0.5;
+  z-index: 1;
 }
 
 /* ==================== 底部控制区 ==================== */

@@ -1,6 +1,6 @@
-import { initRealtime } from './realtime.js?v=handsfree-5';
-import { createUI } from './ui.js?v=handsfree-5';
-import { ConversationEngine } from './engine.js?v=handsfree-5';
+import { initRealtime } from './realtime.js?v=handsfree-6';
+import { createUI } from './ui.js?v=handsfree-6';
+import { ConversationEngine } from './engine.js?v=handsfree-6';
 
 class Router {
   constructor(app) {
