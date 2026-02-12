@@ -1,5 +1,8 @@
 import { RealtimeClient, EventNames, RealtimeUtils } from 'https://esm.sh/@coze/realtime-api@1.3.2';
 
+// Core realtime flow is ported from the stable POC runtime:
+// /poc/coze-realtime-poc.html (speech-time frame upload + image[]/text bundle send).
+
 const DEFAULT_BASE = 'https://api.coze.cn';
 
 const STATUS_LABELS = {
