@@ -74,13 +74,7 @@
             <div class="main-area">
                 <div class="camera-fullscreen">
                     <div id="camera-preview" class="camera-render-host"></div>
-                    <!-- Viewfinder overlay -->
-                    <div class="camera-viewfinder">
-                        <div class="camera-corner tl"></div>
-                        <div class="camera-corner tr"></div>
-                        <div class="camera-corner bl"></div>
-                        <div class="camera-corner br"></div>
-                    </div>
+                    <div class="camera-atmosphere"></div>
                 </div>
 
                 <!-- AI Indicator -->
@@ -127,13 +121,6 @@
                 </button>
             </div>
 
-            <!-- Front Camera PiP -->
-            <div class="camera-pip">
-                <!-- Placeholder if no camera -->
-                <span class="camera-pip-placeholder">📷</span>
-                <div id="companion-preview" class="camera-render-host"></div>
-            </div>
-
             <div class="main-area">
                 <div class="companion-avatar">
                     <div class="companion-sphere" id="companion-sphere">
@@ -166,6 +153,6 @@
     <!-- Hidden canvas for capture -->
     <canvas id="photo-canvas" style="display: none;"></canvas>
 
-    <script type="module" src="js/main.js?v=handsfree-11"></script>
+    <script type="module" src="js/main.js?v=handsfree-12"></script>
 </body>
 </html>
