@@ -15,19 +15,9 @@ function setStateBadge(mode, text, tone) {
   el.className = `state-badge ${tone || ''}`.trim();
 }
 
-function safeJsonPreview(obj, maxLen = 220) {
-  if (obj == null) return '';
-  if (typeof obj === 'string') return obj.slice(0, maxLen);
-  try {
-    const s = JSON.stringify(obj);
-    return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
-  } catch {
-    return String(obj).slice(0, maxLen);
-  }
-}
-
 // Unified UI adapter for Explore/Companion.
 export function createUI() {
+  const debugUIEnabled = false;
   const ui = {
     mode: 'explore',
 
@@ -37,6 +27,7 @@ export function createUI() {
     _eventMax: 300,
 
     _ensureEventPanel() {
+      if (!debugUIEnabled) return;
       if (this._eventPanelReady) return;
       const fab = $('event-fab');
       const panel = $('event-panel');
@@ -61,6 +52,7 @@ export function createUI() {
     },
 
     addEvent({ side = 'client', name, detail }) {
+      if (!debugUIEnabled) return;
       // side: client|server
       this._ensureEventPanel();
       const list = $('event-list');
@@ -72,7 +64,9 @@ export function createUI() {
       const row = document.createElement('div');
       row.className = `event-row ${side}`;
 
-      const detailText = typeof detail === 'string' ? detail : safeJsonPreview(detail);
+      const detailText = typeof detail === 'string'
+        ? detail.slice(0, 220)
+        : '';
 
       row.innerHTML = `
         <div class="t">${t}</div>
@@ -138,6 +132,7 @@ export function createUI() {
     },
 
     setRealtimeStatus(label, status, error) {
+      if (!debugUIEnabled) return;
       const el = document.getElementById('realtime-status');
       if (!el) return;
       el.textContent = error ? `${label}（${error}）` : label;

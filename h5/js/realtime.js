@@ -97,6 +97,29 @@ function looksLikeJsonString(value) {
   return (text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'));
 }
 
+function shouldHideStructuredText(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (looksLikeJsonString(text)) return true;
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('generate_answer_finish') ||
+    lower.includes('time_capsule_recall') ||
+    lower.includes('msg_type') ||
+    lower.includes('from_module') ||
+    lower.includes('from_unit') ||
+    lower.includes('findata') ||
+    lower.includes('\\"msg_type\\"')
+  );
+}
+
+function sanitizeAssistantDisplayText(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (shouldHideStructuredText(text)) return '';
+  return text;
+}
+
 function extractTextFromEvent(event) {
   const candidates = [
     event?.data?.delta,
@@ -740,12 +763,20 @@ export function initRealtime({ ui, getConfig } = {}) {
       return true;
     }
 
-    if (!text) return false;
-    ui?.setReplyText?.(text);
+    const displayText = sanitizeAssistantDisplayText(text);
+    if (!displayText) {
+      logLocal('assistant_text_skip', {
+        source,
+        eventType,
+        reason: 'structured_or_debug_text'
+      });
+      return false;
+    }
+    ui?.setReplyText?.(displayText);
     logLocal('assistant_text', {
       source,
       eventType,
-      textPreview: text.slice(0, 180)
+      textPreview: displayText.slice(0, 180)
     });
     return true;
   };
