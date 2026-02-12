@@ -1,185 +1,94 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>小探探 MiniExplorer</title>
-    <link rel="stylesheet" href="css/style.css">
-    <style>
-        /* Screen management */
-        .screen {
-            display: none;
-            height: 100%;
-            flex-direction: column;
-        }
-        .screen.active {
-            display: flex;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>MiniExplorer H5 (POC Runtime)</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f1115;
+    }
+    .shell {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      background: #0f1115;
+    }
+    .bar {
+      height: 44px;
+      flex: 0 0 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #b8c0cc;
+      font: 600 13px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
+      letter-spacing: 0.2px;
+      background: #161b22;
+      border-bottom: 1px solid #222a33;
+    }
+    .frame-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+    iframe {
+      border: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0f1115;
+    }
+    .fallback {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #d8dee9;
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
+      padding: 24px;
+    }
+    .fallback a {
+      color: #7ec8ff;
+      text-decoration: none;
+    }
+  </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- HOME SCREEN -->
-        <div id="screen-home" class="screen active home-screen">
-            <div class="safe-area-top"></div>
-            
-            <header class="home-header">
-                <h1 class="app-title">小探探 MiniExplorer</h1>
-                <div class="home-realtime" id="realtime-status">Realtime: 未连接</div>
-            </header>
-
-            <div class="home-avatar">
-                <div class="avatar-glow"></div>
-                <div class="avatar-sphere">
-                    <div class="avatar-face">😊</div>
-                </div>
-                <div class="avatar-greeting">你好呀！我是小探探</div>
-            </div>
-
-            <div class="home-actions">
-                <div class="action-card" onclick="app.router.go('explore')">
-                    <div class="action-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                            <circle cx="12" cy="13" r="4"/>
-                        </svg>
-                    </div>
-                    <span class="action-label">看看这个（探索模式）</span>
-                </div>
-
-                <div class="action-card" onclick="app.router.go('companion')">
-                    <div class="action-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                        </svg>
-                    </div>
-                    <span class="action-label">聊聊天（陪伴模式）</span>
-                </div>
-            </div>
-            
-            <div class="safe-area-bottom"></div>
-        </div>
-
-        <!-- EXPLORE SCREEN (Modified from prototype/explore.html) -->
-        <div id="screen-explore" class="screen function-screen">
-            <!-- Navbar -->
-            <div class="nav-bar">
-                <button class="nav-back" onclick="app.router.go('home')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M15 18l-6-6 6-6"/>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Main Area -->
-            <div class="main-area">
-                <div class="camera-fullscreen">
-                    <div id="camera-preview" class="camera-render-host"></div>
-                    <!-- Viewfinder overlay -->
-                    <div class="camera-viewfinder">
-                        <div class="camera-corner tl"></div>
-                        <div class="camera-corner tr"></div>
-                        <div class="camera-corner bl"></div>
-                        <div class="camera-corner br"></div>
-                    </div>
-                </div>
-
-                <!-- AI Indicator -->
-                <div class="ai-indicator">
-                    <div class="ai-indicator-dot" id="explore-ai-dot">
-                        <span class="avatar-face" id="explore-ai-face">😊</span>
-                    </div>
-                    <div class="ai-indicator-text" id="explore-status">对准想看的东西</div>
-                    <div class="state-badge" id="explore-state">Ready</div>
-                </div>
-            </div>
-
-            <!-- Controls (button removed; only show subtle waves) -->
-            <div class="control-bar" style="background: transparent; box-shadow: none;">
-                <div class="sound-waves" id="explore-waves">
-                    <div class="sound-wave"></div>
-                    <div class="sound-wave"></div>
-                    <div class="sound-wave"></div>
-                </div>
-            </div>
-
-            <!-- Permission Overlay -->
-            <div class="permission-overlay" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.25);backdrop-filter:blur(12px);z-index:999;">
-              <div style="background:rgba(255,255,255,0.92);border-radius:24px;padding:24px 18px;max-width:320px;width:86%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.12);">
-                <div style="font-weight:700;font-size:16px;margin-bottom:8px;">开始对话</div>
-                <div style="font-size:13px;color:#556;line-height:1.4;margin-bottom:16px;">需要麦克风权限；相机可选（未授权也能聊天）。</div>
-                <button class="main-btn idle" style="width:100%;">开始</button>
-              </div>
-            </div>
-
-            <!-- Flash overlay -->
-            <div class="flash-overlay" id="flash"></div>
-        </div>
-
-        <!-- COMPANION SCREEN (Modified from prototype/companion.html) -->
-        <div id="screen-companion" class="screen function-screen">
-            <div class="companion-bg"></div>
-            
-            <div class="nav-bar">
-                <button class="nav-back" onclick="app.router.go('home')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M15 18l-6-6 6-6"/>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Front Camera PiP -->
-            <div class="camera-pip">
-                <!-- Placeholder if no camera -->
-                <span class="camera-pip-placeholder">📷</span>
-                <div id="companion-preview" class="camera-render-host"></div>
-            </div>
-
-            <div class="main-area">
-                <div class="companion-avatar">
-                    <div class="companion-sphere" id="companion-sphere">
-                        <div class="avatar-face" id="companion-face">😊</div>
-                    </div>
-                    <div class="companion-status" id="companion-status">想聊什么？</div>
-                    <div class="state-badge" id="companion-state">Ready</div>
-                </div>
-            </div>
-
-            <div class="control-bar" style="background: transparent; box-shadow: none;">
-                <div class="sound-waves" id="companion-waves">
-                    <div class="sound-wave"></div>
-                    <div class="sound-wave"></div>
-                    <div class="sound-wave"></div>
-                </div>
-            </div>
-
-            <!-- Permission Overlay -->
-            <div class="permission-overlay" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.12);backdrop-filter:blur(12px);z-index:999;">
-              <div style="background:rgba(255,255,255,0.92);border-radius:24px;padding:24px 18px;max-width:320px;width:86%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.10);">
-                <div style="font-weight:700;font-size:16px;margin-bottom:8px;">开始对话</div>
-                <div style="font-size:13px;color:#556;line-height:1.4;margin-bottom:16px;">需要麦克风权限；相机可选。</div>
-                <button class="main-btn idle" style="width:100%;">开始</button>
-              </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Hidden canvas for capture -->
-    <canvas id="photo-canvas" style="display: none;"></canvas>
-
-    <!-- Debug: Events Panel -->
-    <button id="event-fab" class="event-fab" title="Toggle Events">Events</button>
-    <div id="event-panel" class="event-panel" style="display:none;">
-      <div class="event-panel-header">
-        <div class="event-panel-title">Realtime Events</div>
-        <div class="event-panel-actions">
-          <button id="event-clear" class="event-btn">Clear</button>
-          <button id="event-close" class="event-btn">Close</button>
+  <div class="shell">
+    <div class="bar">H5 Runtime: Using POC Implementation</div>
+    <div class="frame-wrap">
+      <iframe id="pocFrame" allow="camera; microphone; autoplay; fullscreen"></iframe>
+      <div class="fallback" id="fallback">
+        <div>
+          无法加载 POC 页面，请直接打开
+          <a id="pocLink" href="#">/poc/coze-realtime-poc.html</a>
         </div>
       </div>
-      <div id="event-list" class="event-panel-list"></div>
     </div>
+  </div>
 
-    <script type="module" src="js/main.js?v=handsfree-6"></script>
+  <script>
+    (function() {
+      const iframe = document.getElementById('pocFrame');
+      const fallback = document.getElementById('fallback');
+      const pocURL = new URL('../poc/coze-realtime-poc.html', location.href);
+      const pocHref = pocURL.toString();
+      const link = document.getElementById('pocLink');
+      link.href = pocHref;
+      link.textContent = pocHref;
+
+      iframe.src = pocHref;
+      iframe.addEventListener('error', () => {
+        fallback.style.display = 'flex';
+      });
+    })();
+  </script>
 </body>
 </html>
