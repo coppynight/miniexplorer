@@ -324,6 +324,10 @@ body {
   position: relative;
 }
 
+#screen-explore .main-area {
+  position: static;
+}
+
 /* ==================== 探索模式 ==================== */
 .camera-fullscreen {
   position: absolute;
@@ -332,6 +336,7 @@ body {
   right: 0;
   bottom: 0;
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  z-index: 0;
 }
 
 .camera-render-host {
@@ -357,6 +362,7 @@ body {
   aspect-ratio: 1;
   border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-lg);
+  z-index: 1;
 }
 
 .camera-corner {
@@ -381,6 +387,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
+  z-index: 20;
 }
 
 .ai-indicator-dot {

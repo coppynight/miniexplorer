@@ -63,7 +63,10 @@ function coerceStringFromUnknown(value) {
   if (typeof value === 'object') {
     const keys = ['text', 'delta', 'transcript', 'content', 'value', 'sentence', 'utterance', 'asr_text'];
     for (const key of keys) {
-      if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim();
+      if (typeof value[key] === 'string' && value[key].trim()) {
+        if (looksLikeJsonString(value[key])) continue;
+        return value[key].trim();
+      }
     }
   }
   return '';
@@ -77,8 +80,21 @@ function extractTextFromObjectString(content) {
       const textItem = parsed.find((item) => item && item.type === 'text' && typeof item.text === 'string');
       return textItem?.text || '';
     }
+    if (parsed && typeof parsed === 'object') {
+      const msgType = String(parsed.msg_type || '');
+      if (msgType === 'time_capsule_recall' || msgType === 'generate_answer_finish') return '';
+      if (typeof parsed.text === 'string' && parsed.text.trim()) return parsed.text.trim();
+      if (typeof parsed.wraped_text === 'string' && parsed.wraped_text.trim()) return parsed.wraped_text.trim();
+      if (typeof parsed.content === 'string' && parsed.content.trim()) return parsed.content.trim();
+    }
   } catch (_) {}
   return '';
+}
+
+function looksLikeJsonString(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  return (text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'));
 }
 
 function extractTextFromEvent(event) {
@@ -96,7 +112,9 @@ function extractTextFromEvent(event) {
   for (const candidate of candidates) {
     if (typeof candidate === 'string' && candidate.trim()) {
       const fromObjectString = extractTextFromObjectString(candidate);
-      return fromObjectString || candidate.trim();
+      if (fromObjectString) return fromObjectString;
+      if (looksLikeJsonString(candidate)) continue;
+      return candidate.trim();
     }
     const value = coerceStringFromUnknown(candidate);
     if (value) return value;
