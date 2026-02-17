@@ -324,6 +324,10 @@ body {
   position: relative;
 }
 
+#screen-explore .main-area {
+  position: static;
+}
+
 /* ==================== 探索模式 ==================== */
 .camera-fullscreen {
   position: absolute;
@@ -332,31 +336,42 @@ body {
   right: 0;
   bottom: 0;
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  z-index: 0;
 }
 
-.camera-viewfinder {
+.camera-render-host {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  max-width: 300px;
-  aspect-ratio: 1;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-lg);
+  inset: 0;
+  overflow: hidden;
 }
 
-.camera-corner {
+.camera-render-host video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-atmosphere {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.6);
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 70% at 50% 100%, rgba(18, 39, 86, 0.48) 0%, rgba(18, 39, 86, 0.18) 45%, rgba(18, 39, 86, 0) 72%),
+    radial-gradient(90% 50% at 50% -8%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 75%),
+    linear-gradient(180deg, rgba(5, 9, 19, 0.14) 0%, rgba(5, 9, 19, 0.06) 42%, rgba(5, 9, 19, 0.32) 100%);
 }
 
-.camera-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; border-radius: 4px 0 0 0; }
-.camera-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; border-radius: 0 4px 0 0; }
-.camera-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; border-radius: 0 0 0 4px; }
-.camera-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; border-radius: 0 0 4px 0; }
+.camera-atmosphere::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(10, 16, 28, 0) 0%, rgba(10, 16, 28, 0.35) 60%, rgba(10, 16, 28, 0.58) 100%);
+}
 
 /* 探索模式 AI 指示器 */
 .ai-indicator {
@@ -368,6 +383,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
+  z-index: 20;
 }
 
 .ai-indicator-dot {
@@ -472,28 +488,6 @@ body {
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text-secondary);
-}
-
-/* 前置摄像头预览 */
-.camera-pip {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 44px) + 60px);
-  right: var(--spacing-lg);
-  width: 80px;
-  height: 110px;
-  background: linear-gradient(180deg, #2C3E50 0%, #34495E 100%);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  border: 2px solid var(--color-surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.camera-pip-placeholder {
-  font-size: 28px;
-  opacity: 0.5;
 }
 
 /* ==================== 底部控制区 ==================== */

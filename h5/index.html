@@ -25,7 +25,6 @@
             
             <header class="home-header">
                 <h1 class="app-title">小探探 MiniExplorer</h1>
-                <div class="home-realtime" id="realtime-status">Realtime: 未连接</div>
             </header>
 
             <div class="home-avatar">
@@ -74,14 +73,8 @@
             <!-- Main Area -->
             <div class="main-area">
                 <div class="camera-fullscreen">
-                    <video id="camera-preview" autoplay playsinline muted></video>
-                    <!-- Viewfinder overlay -->
-                    <div class="camera-viewfinder">
-                        <div class="camera-corner tl"></div>
-                        <div class="camera-corner tr"></div>
-                        <div class="camera-corner bl"></div>
-                        <div class="camera-corner br"></div>
-                    </div>
+                    <div id="camera-preview" class="camera-render-host"></div>
+                    <div class="camera-atmosphere"></div>
                 </div>
 
                 <!-- AI Indicator -->
@@ -128,13 +121,6 @@
                 </button>
             </div>
 
-            <!-- Front Camera PiP -->
-            <div class="camera-pip">
-                <!-- Placeholder if no camera -->
-                <span class="camera-pip-placeholder">📷</span>
-                <video id="companion-preview" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;"></video>
-            </div>
-
             <div class="main-area">
                 <div class="companion-avatar">
                     <div class="companion-sphere" id="companion-sphere">
@@ -167,19 +153,6 @@
     <!-- Hidden canvas for capture -->
     <canvas id="photo-canvas" style="display: none;"></canvas>
 
-    <!-- Debug: Events Panel -->
-    <button id="event-fab" class="event-fab" title="Toggle Events">Events</button>
-    <div id="event-panel" class="event-panel" style="display:none;">
-      <div class="event-panel-header">
-        <div class="event-panel-title">Realtime Events</div>
-        <div class="event-panel-actions">
-          <button id="event-clear" class="event-btn">Clear</button>
-          <button id="event-close" class="event-btn">Close</button>
-        </div>
-      </div>
-      <div id="event-list" class="event-panel-list"></div>
-    </div>
-
-    <script type="module" src="js/main.js?v=handsfree-3"></script>
+    <script type="module" src="js/main.js?v=handsfree-14"></script>
 </body>
 </html>

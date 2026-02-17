@@ -1,11 +1,11 @@
 const DEFAULT_BASE = 'https://api.coze.cn';
+const DEFAULT_COZE_TOKEN = 'pat_WKWKErHsHlobn5UPgYdopkYWWhP23FQ9e1XDmovqjwIlgzJfXZkmf6dz0tdE7311';
+const DEFAULT_COZE_BOT_ID = '7598529675404886059';
 
 function getConfig() {
-  // For safety, we do NOT hardcode token into repo.
-  // Users can set these in localStorage.
   const baseUrl = localStorage.getItem('COZE_BASE_URL') || DEFAULT_BASE;
-  const token = localStorage.getItem('COZE_TOKEN') || '';
-  const botId = localStorage.getItem('COZE_BOT_ID') || '7598529675404886059';
+  const token = localStorage.getItem('COZE_TOKEN') || DEFAULT_COZE_TOKEN;
+  const botId = localStorage.getItem('COZE_BOT_ID') || DEFAULT_COZE_BOT_ID;
   return { baseUrl, token, botId };
 }
 
